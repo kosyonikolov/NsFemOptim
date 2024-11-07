@@ -40,3 +40,16 @@ function assembleGlobalLoadVector(nodes::AbstractMatrix{<:Number}, elements::Abs
     end
     return b
 end
+
+function assembleGlobalBorderLoadVector(nodes::AbstractMatrix{<:Number}, elements::AbstractMatrix{<:Integer},
+                                        shapeFunction::Function, f::Function, xw::AbstractMatrix{<:Number})
+    n = size(nodes)[1]
+    b = zeros(n)
+    m = size(elements)[1]
+    for i = 1:m
+        τ = elements[i, :]
+        localVec = calcLocalBorderLoadVector(nodes[τ, :], shapeFunction, f, xw)
+        b[τ] .+= localVec
+    end
+    return b
+end

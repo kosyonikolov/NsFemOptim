@@ -64,3 +64,23 @@ function calcLocalLoadVector(nodes::AbstractMatrix{<:Number}, val::Function, f::
     result .*= abs(detJ)
     return result 
 end
+
+function calcLocalBorderLoadVector(nodes::AbstractMatrix{<:Number}, val::Function, f::Function, xw::AbstractMatrix{<:Number})
+    mv = nodes[2,:] - nodes[1,:]
+    len = sqrt(sum(mv.^2))
+
+    function sample(refX, w)
+        shapeVal = val(refX)
+        pt = nodes[1,:] .+ (refX .* mv)
+        fVal = f(pt)
+        return shapeVal .* (fVal * w)
+    end
+
+    result = sample(xw[1,1], xw[1,2])
+    n = size(xw)[1]
+    for i = 2:n
+        result .+= sample(xw[i,1], xw[i,2])
+    end
+
+    return result * len
+end

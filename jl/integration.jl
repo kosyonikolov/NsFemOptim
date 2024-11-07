@@ -62,3 +62,13 @@ function getSimpleGridOnStdTriangle(n::Integer)
 
     return xyw
 end
+
+# For [0, 1]
+function getGaussQuadrature(deg::Integer)
+    if deg == 2
+        s = sqrt(1/12)
+        return [(0.5 - s) 0.5; (0.5 + s) 0.5]
+    end
+
+    throw("No formula for degree $deg")
+end

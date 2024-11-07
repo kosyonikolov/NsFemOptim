@@ -44,3 +44,20 @@ function plotBorderNodes!(p, border::AbstractMatrix{<:Integer}, nodes::AbstractM
     end
     return p
 end
+
+function plotBorderNormals(nodes::AbstractMatrix{<:Number}, border::AbstractMatrix{<:Integer})
+    p = Plots.plot()
+    n = size(border)[1]
+    for i = 1:n
+        pts = nodes[border[i,3:4], :]
+        plot!(p, pts[:,1], pts[:,2], label="", color=:black)
+
+        mv = pts[2,:] - pts[1,:]
+        normal = zeros(2,2)
+        normal[1,:] = 0.5 * (pts[1,:] + pts[2,:])
+        normal[2,1] = normal[1,1] - mv[2]
+        normal[2,2] = normal[1,2] + mv[1]
+        plot!(p, normal[:,1], normal[:,2], label="", color=:red)
+    end
+    return p
+end

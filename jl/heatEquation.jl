@@ -23,3 +23,24 @@ function solveHeatEquation2Borders(nodes::AbstractMatrix{<:Number}, elements::Ab
 
     return result
 end
+
+function solveHeatEquationMixedBorders(nodes::AbstractMatrix{<:Number}, elements::AbstractMatrix{<:Integer}, 
+                                       flowBorderElements::AbstractMatrix{<:Integer}, 
+                                       dirichletBorderElements::AbstractMatrix{<:Integer})
+    xyw = getStdTriangleCowperXyw(2)
+    xw = getGaussQuadrature(2)
+    m1 = assembleGlobalStiffnessMatrix(nodes, elements, p1Grad, xyw)
+    b1 = assembleGlobalBorderLoadVector(nodes, flowBorderElements, p1Value1d, p -> 1, xw)
+
+    n = size(nodes)[1]
+    borderIds = unique(sort(vec(dirichletBorderElements)))
+    intIds = setdiff(1:n, borderIds)
+
+    m = m1[intIds, intIds]
+    b = b1[intIds]
+    qInt = m \ b
+
+    result = zeros(n)
+    result[intIds] .= qInt
+    return result
+end

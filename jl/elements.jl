@@ -7,6 +7,10 @@ function p1Value(p::AbstractVector{<:Number})
     return [1 - p[1] - p[2], p[1], p[2]]
 end
 
+function p1Value1d(x::Number)
+    return [1 - x, x]
+end
+
 function p1Grad()
     return [-1 -1; 1 0; 0 1]
 end
