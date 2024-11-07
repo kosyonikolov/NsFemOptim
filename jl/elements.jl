@@ -11,6 +11,10 @@ function p1Grad()
     return [-1 -1; 1 0; 0 1]
 end
 
+function p1Grad(p::Any)
+    return [-1 -1; 1 0; 0 1]
+end
+
 # =========== Crouzeix–Raviart ===========
 function crValue(x::Number, y::Number)
     return [1 - 2y, -1 + 2x + 2y, 1 - 2x]
