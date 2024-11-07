@@ -18,13 +18,27 @@ function calcLocalMassMatrix(nodes::AbstractMatrix{<:Number}, val::Function, xyw
 end
 
 function calcLocalLoadVector(nodes::AbstractMatrix{<:Number}, val::Function, f::Function, xyw::AbstractMatrix{<:Number})
-    m, b = calcRefTriangleTransform(nodes[:,1], nodes[:,2])
-    detJ = det(calcRefTriangleTransformJacobian(nodes[:,1], nodes[:,2]))
+    M, b = calcRefTriangleTransform(nodes)
+    detJ = det(calcRefTriangleTransformJacobian(nodes))
 
-    result = val(xyw[1,1:2]) .* (xyw[1,3] * f(m * xyw[1,1:2] .+ b))
-    m = size(xyw)[1]
-    for i = 2:m
-        result .+= val(xyw[i,1:2]) .* (xyw[i,3] * f(m * xyw[i,1:2] .+ b))
+    function sample(refPt, w)
+        shapeVal = val(refPt)
+        pt = M * refPt .+ b
+        fVal = f(pt)
+        r = shapeVal .* fVal
+        return r .* w
+    end
+
+    result = sample(xyw[1,1:2], xyw[1,3])
+    # println("INIT $(xyw[1,1:2]) -> $result")
+    n = size(xyw)[1]
+    for i = 2:n
+        # println("$(xyw[i,1:2])")
+        curr = sample(xyw[i,1:2], xyw[i,3])
+        # println("\told result = $curr")
+        # println("\tcurr = $curr")
+        result .+= curr
+        # println("\tnew result = $result")
     end
     result .*= abs(detJ)
     return result 

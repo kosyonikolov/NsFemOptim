@@ -41,3 +41,24 @@ function integrateStdTriangle(xyw::AbstractMatrix{<:Number}, f::Function)
     end
     return sum
 end
+
+function getSimpleGridOnStdTriangle(n::Integer)
+    h = 1.0 / n
+    xs = Vector{Float32}()
+    ys = Vector{Float32}()
+    for iy = 0:(n - 1)
+        y = (0.5 + iy) * h
+        for ix = 0:(n - iy - 2)
+            x = (0.5 + ix) * h
+            push!(xs, x)
+            push!(ys, y)
+        end
+    end
+    m = lastindex(xs)
+    xyw = zeros(m, 3)
+    xyw[:,1] = xs
+    xyw[:,2] = ys
+    xyw[:,3] .= 0.5 / lastindex(xs)
+
+    return xyw
+end

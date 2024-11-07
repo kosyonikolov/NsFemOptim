@@ -19,6 +19,10 @@ function calcRefTriangleTransform(xs::AbstractVector{<:Number}, ys::AbstractVect
     return m, b
 end
 
+function calcRefTriangleTransform(triangle::AbstractMatrix{<:Number})
+    return calcRefTriangleTransform(triangle[:,1], triangle[:,2])
+end
+
 function calcRefTriangleTransformJacobian(xs::AbstractVector{<:Number}, ys::AbstractVector{<:Number})
     @assert(lastindex(xs) == 3)
     @assert(lastindex(ys) == 3)
@@ -31,6 +35,10 @@ function calcRefTriangleTransformJacobian(xs::AbstractVector{<:Number}, ys::Abst
     j[2,2] = ys[3] - ys[1]
 
     return j
+end
+
+function calcRefTriangleTransformJacobian(triangle::AbstractMatrix{<:Number})
+    return calcRefTriangleTransformJacobian(triangle[:,1], triangle[:,2])
 end
 
 # The matrix used for gradient computation
@@ -46,4 +54,8 @@ function calcRefTriangleTransformB(xs::AbstractVector{<:Number}, ys::AbstractVec
     b[2,2] = xs[2] - xs[1]
 
     return b
+end
+
+function calcRefTriangleTransformB(triangle::AbstractMatrix{<:Number})
+    return calcRefTriangleTransformB(triangle[:,1], triangle[:,2])
 end

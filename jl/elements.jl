@@ -3,7 +3,7 @@ function p1Value(x::Number, y::Number)
     return [1 - x - y, x, y]
 end
 
-function p1Value(p::AbstractVector{<:Number, 1})
+function p1Value(p::AbstractVector{<:Number})
     return [1 - p[1] - p[2], p[1], p[2]]
 end
 
