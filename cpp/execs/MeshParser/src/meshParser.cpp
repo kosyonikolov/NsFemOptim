@@ -291,20 +291,29 @@ void dumpPointsAndElements2d(const std::string & prefix, std::vector<ParsedNode>
         nodeFile << std::format("{}\t{}\t{}\n", node.id, node.x, node.y);
     }
 
+    std::ofstream borderElements(prefix + "borders.txt");
     std::ofstream elementsFile(prefix + "elements.txt");
     for (const auto & e : elements)
     {
-        if (e.points.size() != 3)
+        const auto n = e.points.size();
+        if (n == 2)
         {
-            continue;
+            borderElements << e.entity << "\t" << e.id;
+            for (auto p : e.points)
+            {
+                borderElements << "\t" << p;
+            }
+            borderElements << "\n";
         }
-
-        elementsFile << e.id;
-        for (auto p : e.points)
+        else if (n == 3)
         {
-            elementsFile << "\t" << p;
+            elementsFile << e.id;
+            for (auto p : e.points)
+            {
+                elementsFile << "\t" << p;
+            }
+            elementsFile << "\n";
         }
-        elementsFile << "\n";
     }
 };
 
