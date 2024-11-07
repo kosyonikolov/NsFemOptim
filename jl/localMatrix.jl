@@ -2,8 +2,8 @@ using LinearAlgebra
 
 include("coordTransform.jl")
 
-function calcLocalMassMatrix(nodes::AbstractMatrix{<:Number}, val::Function, xyw::AbstractMatrix{<:Number})
-    j = calcRefTriangleTransformJacobian(nodes[:,1], nodes[:,2])
+function calcLocalMassMatrix(triangle::AbstractMatrix{<:Number}, val::Function, xyw::AbstractMatrix{<:Number})
+    j = calcRefTriangleTransformJacobian(triangle[:,1], triangle[:,2])
     detJ = det(j)
     first = val(xyw[1,1], xyw[1,2])
     result = (first * first') .* xyw[1,3]
@@ -17,9 +17,9 @@ function calcLocalMassMatrix(nodes::AbstractMatrix{<:Number}, val::Function, xyw
     return result
 end
 
-function calcLocalStiffnessMatrix(nodes::AbstractMatrix{<:Number}, grad::Function, xyw::AbstractMatrix{<:Number})
-    j = calcRefTriangleTransformJacobian(nodes)
-    B = calcRefTriangleTransformB(nodes)
+function calcLocalStiffnessMatrix(triangle::AbstractMatrix{<:Number}, grad::Function, xyw::AbstractMatrix{<:Number})
+    j = calcRefTriangleTransformJacobian(triangle)
+    B = calcRefTriangleTransformB(triangle)
     BtB = B' * B
 
     function sample(refPt, w)
@@ -38,9 +38,37 @@ function calcLocalStiffnessMatrix(nodes::AbstractMatrix{<:Number}, grad::Functio
     return result
 end
 
-function calcLocalLoadVector(nodes::AbstractMatrix{<:Number}, val::Function, f::Function, xyw::AbstractMatrix{<:Number})
-    M, b = calcRefTriangleTransform(nodes)
-    detJ = det(calcRefTriangleTransformJacobian(nodes))
+function calcLocalConvectionMatrix(triangle::AbstractMatrix{<:Number}, shape::Function, grad::Function, flow::Function,
+                                   xyw::AbstractMatrix{<:Number})
+    M, b = calcRefTriangleTransform(triangle)
+    j = calcRefTriangleTransformJacobian(triangle)
+    B = calcRefTriangleTransformB(triangle)
+
+    function sample(refPt, w)
+        pt = M * refPt .+ b
+
+        shapeVal = shape(refPt)
+        gradVal = grad(refPt) * B
+        flowVal = flow(pt)
+
+        return gradVal * flowVal * shapeVal' .* w
+    end
+
+    result = sample(xyw[1,1:2], xyw[1,3])
+    n = size(xyw)[1]
+    for i = 2:n
+        curr = sample(xyw[i,1:2], xyw[i,3])
+        result .+= curr
+    end
+
+    sign = det(j) < 0 ? -1 : 1
+
+    return result * sign
+end
+
+function calcLocalLoadVector(triangle::AbstractMatrix{<:Number}, val::Function, f::Function, xyw::AbstractMatrix{<:Number})
+    M, b = calcRefTriangleTransform(triangle)
+    detJ = det(calcRefTriangleTransformJacobian(triangle))
 
     function sample(refPt, w)
         shapeVal = val(refPt)
@@ -65,13 +93,13 @@ function calcLocalLoadVector(nodes::AbstractMatrix{<:Number}, val::Function, f::
     return result 
 end
 
-function calcLocalBorderLoadVector(nodes::AbstractMatrix{<:Number}, val::Function, f::Function, xw::AbstractMatrix{<:Number})
-    mv = nodes[2,:] - nodes[1,:]
+function calcLocalBorderLoadVector(triangle::AbstractMatrix{<:Number}, val::Function, f::Function, xw::AbstractMatrix{<:Number})
+    mv = triangle[2,:] - triangle[1,:]
     len = sqrt(sum(mv.^2))
 
     function sample(refX, w)
         shapeVal = val(refX)
-        pt = nodes[1,:] .+ (refX .* mv)
+        pt = triangle[1,:] .+ (refX .* mv)
         fVal = f(pt)
         return shapeVal .* (fVal * w)
     end

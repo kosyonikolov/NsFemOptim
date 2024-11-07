@@ -28,6 +28,19 @@ function assembleGlobalStiffnessMatrix(nodes::AbstractMatrix{<:Number}, elements
     return result
 end
 
+function assembleGlobalConvectionMatrix(nodes::AbstractMatrix{<:Number}, elements::AbstractMatrix{<:Integer},
+                                        shape::Function, grad::Function, flow::Function, xyw::AbstractMatrix{<:Number})
+    n = size(nodes)[1]
+    result = spzeros(n, n)
+    m = size(elements)[1]
+    for i = 1:m
+        τ = elements[i, :]
+        localMatrix = calcLocalConvectionMatrix(nodes[τ, :], shape, grad, flow, xyw)
+        result[τ, τ] .+= localMatrix 
+    end
+    return result
+end
+
 function assembleGlobalLoadVector(nodes::AbstractMatrix{<:Number}, elements::AbstractMatrix{<:Integer},
                                   shapeFunction::Function, f::Function, xyw::AbstractMatrix{<:Number})
     n = size(nodes)[1]
