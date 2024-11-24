@@ -49,6 +49,18 @@ struct ElementSection
     std::vector<ParsedElement> elements;
 };
 
+struct PhysicalName
+{
+    int dimension;
+    int tag;
+    std::string name;
+};
+
+struct PhysicsSection
+{
+    std::vector<PhysicalName> names;
+};
+
 bool startswith(const std::string & str, const std::string & prefix)
 {
     const auto n = str.size();
@@ -279,6 +291,32 @@ ElementSection parseElementSection(const std::string & text)
     return result;
 }
 
+PhysicsSection parsePhysicsSection(const std::string & text)
+{
+    std::istringstream iss(text);
+    PhysicsSection result;
+
+    int numNames;
+    if (!parseLineFrom(iss, numNames))
+    {
+        throw std::invalid_argument("Failed to parse number of names in PhysicalSection");
+    }
+
+    int dim;
+    int tag;
+    std::string name;
+    for (int i = 0; i < numNames; i++)
+    {
+        if (!parseLineFrom(iss, dim, tag, name))
+        {
+            throw std::runtime_error("Failed to parse line from physics section");
+        }
+        result.names.push_back({dim, tag, name});
+    }
+
+    return result;
+}
+
 void dumpPointsAndElements2d(const std::string & prefix, std::vector<ParsedNode> & nodes,
                              std::vector<ParsedElement> & elements)
 {
@@ -353,6 +391,17 @@ int main(int argc, char ** argv)
 
     auto nodeSection = parseNodeSection(nodesSectionText.value());
     auto elementSection = parseElementSection(elementSectionText.value());
+
+    auto physText = sectioned.contentOf("PhysicalNames");
+    PhysicsSection physicalSection;
+    if (physText)
+    {
+        physicalSection = parsePhysicsSection(physText.value());
+    }
+    else
+    {
+        std::cerr << "No physical section!\n";
+    }
 
     dumpPointsAndElements2d("", nodeSection.nodes, elementSection.elements);
 
