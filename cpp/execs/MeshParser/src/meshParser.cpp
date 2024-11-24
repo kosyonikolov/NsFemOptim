@@ -61,6 +61,60 @@ struct PhysicsSection
     std::vector<PhysicalName> names;
 };
 
+struct PointEntity
+{
+    int tag;
+    double x, y, z;
+    std::vector<int> physicalTags;
+};
+
+struct CurveEntity
+{
+    int tag;
+    double minX, minY, minZ;
+    double maxX, maxY, maxZ;
+    std::vector<int> physicalTags;
+    std::vector<int> boundingPoints;
+};
+
+struct SurfaceEntity
+{
+    int tag;
+    double minX, minY, minZ;
+    double maxX, maxY, maxZ;
+    std::vector<int> physicalTags;
+    std::vector<int> boundingCurves;
+};
+
+struct VolumeEntity
+{
+    int tag;
+    double minX, minY, minZ;
+    double maxX, maxY, maxZ;
+    std::vector<int> physicalTags;
+    std::vector<int> boundingSurfaces;
+};
+
+struct EntitySection
+{
+    std::vector<PointEntity> points;
+    std::vector<CurveEntity> curves;
+    std::vector<SurfaceEntity> surfaces;
+    std::vector<VolumeEntity> volumes;
+};
+
+template<typename T>
+std::istream & operator>>(std::istream & stream, std::vector<T> & v)
+{
+    T val;
+    while (stream >> val)
+    {
+        v.push_back(val);
+    }
+    stream.clear(); // Reset stream to "good"
+    return stream;
+}
+
 bool startswith(const std::string & str, const std::string & prefix)
 {
     const auto n = str.size();
@@ -311,7 +365,138 @@ PhysicsSection parsePhysicsSection(const std::string & text)
         {
             throw std::runtime_error("Failed to parse line from physics section");
         }
-        result.names.push_back({dim, tag, name});
+        if (name.size() < 2)
+        {
+            throw std::runtime_error("Name too short"); // quotes at both ends
+        }
+        result.names.push_back({dim, tag, name.substr(1, name.length() - 2)});
+    }
+
+    return result;
+}
+
+EntitySection parseEntitySection(const std::string & text)
+{
+    std::istringstream iss(text);
+    EntitySection result;
+
+    int numPoints, numCurves, numSurfaces, numVolumes;
+    if (!parseLineFrom(iss, numPoints, numCurves, numSurfaces, numVolumes))
+    {
+        throw std::runtime_error("Failed to parse entities header");
+    }
+
+    result.points.resize(numPoints);
+    result.curves.resize(numCurves);
+    result.surfaces.resize(numSurfaces);
+    result.volumes.resize(numVolumes);
+
+    auto & points = result.points;
+    for (int i = 0; i < numPoints; i++)
+    {
+        size_t numTags;
+        auto & p = points[i];
+        if (!parseLineFrom(iss, p.tag, p.x, p.y, p.z, numTags, p.physicalTags))
+        {
+            throw std::runtime_error("Failed to parse point");
+        }
+        if (numTags != p.physicalTags.size())
+        {
+            throw std::runtime_error("Point's physical tags have an incorrect size");
+        }
+    }
+
+    auto parseHighDimensional = [&](int & tag, 
+                                    double & minX, double & minY, double & minZ,
+                                    double & maxX, double & maxY, double & maxZ,
+                                    std::vector<int> & physicalTags,
+                                    std::vector<int> & boundingTags) -> bool
+    {
+        std::string line;
+        if (!std::getline(iss, line))
+        {
+            return false;
+        }
+
+        std::istringstream lineSs(line);
+        if (!(lineSs >> tag >> minX >> minY >> minZ >> maxX >> maxY >> maxZ))
+        {
+            return false;
+        }
+
+        // Physical tags
+        int numTags;
+        if (!(lineSs >> numTags))
+        {
+            return false;
+        }
+        int val;
+        for (int i = 0; i < numTags; i++)
+        {
+            if (!(lineSs >> val))
+            {
+                return false;
+            }
+            physicalTags.push_back(val);
+        }
+
+        // Bounding tags
+        if (!(lineSs >> numTags))
+        {
+            return false;
+        }
+        for (int i = 0; i < numTags; i++)
+        {
+            if (!(lineSs >> val))
+            {
+                return false;
+            }
+            boundingTags.push_back(val);
+        }
+
+        return true;
+    };
+
+    auto & curves = result.curves;
+    for (int i = 0; i < numCurves; i++)
+    {
+        auto & c = curves[i];
+        if (!parseHighDimensional(c.tag, 
+                                  c.minX, c.minY, c.minZ, 
+                                  c.maxX, c.maxY, c.maxZ,
+                                  c.physicalTags,
+                                  c.boundingPoints))
+        {
+            throw std::runtime_error("Failed to parse curve");
+        }
+    }
+
+    auto & surfaces = result.surfaces;
+    for (int i = 0; i < numSurfaces; i++)
+    {
+        auto & s = surfaces[i];
+        if (!parseHighDimensional(s.tag, 
+                                  s.minX, s.minY, s.minZ, 
+                                  s.maxX, s.maxY, s.maxZ,
+                                  s.physicalTags,
+                                  s.boundingCurves))
+        {
+            throw std::runtime_error("Failed to parse surface");
+        }
+    }
+
+    auto & volumes = result.volumes;
+    for (int i = 0; i < numVolumes; i++)
+    {
+        auto & v = volumes[i];
+        if (!parseHighDimensional(v.tag, 
+                                  v.minX, v.minY, v.minZ, 
+                                  v.maxX, v.maxY, v.maxZ,
+                                  v.physicalTags,
+                                  v.boundingSurfaces))
+        {
+            throw std::runtime_error("Failed to parse volume");
+        }
     }
 
     return result;
@@ -391,6 +576,17 @@ int main(int argc, char ** argv)
 
     auto nodeSection = parseNodeSection(nodesSectionText.value());
     auto elementSection = parseElementSection(elementSectionText.value());
+
+    auto entitiesText = sectioned.contentOf("Entities");
+    EntitySection entities;
+    if (entitiesText)
+    {
+        entities = parseEntitySection(entitiesText.value());
+    }
+    else
+    {
+        std::cerr << "No Entities section!\n";
+    }
 
     auto physText = sectioned.contentOf("PhysicalNames");
     PhysicsSection physicalSection;
