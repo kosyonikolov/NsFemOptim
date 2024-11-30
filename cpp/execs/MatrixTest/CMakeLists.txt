@@ -1,0 +1,1 @@
+add_executable(MatrixTest src/matrixTest.cpp)

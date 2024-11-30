@@ -1,1 +1,2 @@
 add_subdirectory(MeshParser)
+add_subdirectory(MatrixTest)

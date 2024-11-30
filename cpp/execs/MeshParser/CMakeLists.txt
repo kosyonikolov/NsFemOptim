@@ -1,1 +1,1 @@
-add_executable(NsFemOptim src/meshParser.cpp)
+add_executable(MeshParser src/meshParser.cpp)
