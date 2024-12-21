@@ -171,12 +171,57 @@ void gaussSeidelStep(const CsrMatrix<F> & m, F * x, const F * b)
 }
 
 template <typename F>
+void sorStep(const CsrMatrix<F> & m, F * x, const F * b, const F w)
+{
+    const F compW = 1 - w;
+    const int nRows = m.rows;
+    for (int i = 0; i < nRows; i++)
+    {
+        const int j1 = m.rowStart[i + 1];
+        F diag = 0; // element at (i, i)
+        double negSum = 0;
+        for (int j = m.rowStart[i]; j < j1; j++)
+        {
+            const int col = m.colIdx[j];
+            if (col == i)
+            {
+                diag = m.values[j];
+            }
+            else
+            {
+                negSum += m.values[j] * x[col];
+            }
+        }
+        const auto updated = (b[i] - negSum) / diag;
+        x[i] = compW * x[i] + w * updated;
+    }
+}
+
+template <typename F>
 double gaussSeidel(const CsrMatrix<F> & m, F * x, const F * b, const int maxIters, const double eps)
 {
     double lastRes = 0;
     for (int i = 0; i < maxIters; i++)
     {
         gaussSeidelStep(m, x, b);
+        lastRes = residual(m, x, b);
+        std::cout << std::format("{}: {}\n", i, lastRes);
+
+        if (lastRes < eps)
+        {
+            break;
+        }
+    }
+    return lastRes;
+}
+
+template <typename F>
+double sor(const CsrMatrix<F> & m, F * x, const F * b, const F w, const int maxIters, const double eps)
+{
+    double lastRes = 0;
+    for (int i = 0; i < maxIters; i++)
+    {
+        sorStep(m, x, b, w);
         lastRes = residual(m, x, b);
         std::cout << std::format("{}: {}\n", i, lastRes);
 
@@ -216,8 +261,9 @@ int main(int argc, char ** argv)
     std::cout << std::format("Initial error: {}\n", initial);
 
     auto x1 = x0;
-    const double gsRes = gaussSeidel(m, x1.data(), b.data(), 100, 1e-4);
-    std::cout << std::format("Gauss-Seidel err: {}\n", gsRes);
+    float w = 1.1;
+    const double gsRes = sor(m, x1.data(), b.data(), w, 100, 1e-4);
+    std::cout << std::format("SOR err: {}\n", gsRes);
 
     return 0;
 }
