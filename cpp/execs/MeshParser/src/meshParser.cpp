@@ -540,6 +540,15 @@ void dumpPointsAndElements2d(const std::string & prefix, std::vector<ParsedNode>
     }
 };
 
+void dumpPhysicalGroups(const std::string & fileName, const PhysicsSection & phys)
+{
+    std::ofstream file(fileName);
+    for (const auto & name : phys.names)
+    {
+        file << name.tag << "\t" << name.name << "\n";
+    }
+}
+
 int main(int argc, char ** argv)
 {
     const std::string usageMsg = "./MeshParser <msh file>";
@@ -600,6 +609,7 @@ int main(int argc, char ** argv)
     }
 
     dumpPointsAndElements2d("", nodeSection.nodes, elementSection.elements);
+    dumpPhysicalGroups("groups.txt", physicalSection);
 
     return 0;
 }
