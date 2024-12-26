@@ -3,3 +3,4 @@ PointerAlignment: Middle
 BraceWrapping:
   BeforeLambdaBody: true
 AlwaysBreakTemplateDeclarations: Yes
+NamespaceIndentation: All
