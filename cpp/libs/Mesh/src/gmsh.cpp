@@ -444,7 +444,7 @@ namespace mesh
         std::ofstream file(fileName);
         for (const auto & name : phys.names)
         {
-            file << name.tag << "\t" << name.name << "\n";
+            file << name.id << "\t" << name.name << "\n";
         }
     }
 

@@ -5,7 +5,11 @@
 
 namespace mesh
 {
-    TriangleMesh parseTriangularGmsh(const std::string & fileName);
+    struct Gmsh;
+
+    TriangleMesh parseTriangleGmsh(const Gmsh & gmsh);
+
+    TriangleMesh parseTriangleGmsh(const std::string & fileName);
 }
 
 #endif

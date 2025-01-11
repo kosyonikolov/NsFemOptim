@@ -51,7 +51,7 @@ namespace mesh
     struct PhysicalName
     {
         int dimension;
-        int tag;
+        int id;
         std::string name;
     };
 
