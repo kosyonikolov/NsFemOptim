@@ -3,6 +3,7 @@
 
 #include <mesh/gmsh.h>
 #include <mesh/io.h>
+#include <mesh/concreteMesh.h>
 
 int main(int argc, char ** argv)
 {
@@ -21,6 +22,11 @@ int main(int argc, char ** argv)
     // dumpPhysicalGroups("groups.txt", gmsh.physicsSection);
 
     auto triMesh = mesh::parseTriangleGmsh(gmsh);
+
+    const auto elementType = mesh::ElementType::P2;
+    const auto baseElement = mesh::createElement(elementType); 
+    
+    auto mesh = mesh::createMesh(triMesh, baseElement);
 
     return 0;
 }

@@ -5,14 +5,10 @@
 #include <array>
 #include <string>
 
+#include <mesh/point.h>
+
 namespace mesh
 {
-    struct Point
-    {
-        float x;
-        float y;
-    };
-
     struct TriangleSide
     {
         int from;
