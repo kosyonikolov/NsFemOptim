@@ -2,6 +2,7 @@
 #include <string>
 
 #include <mesh/gmsh.h>
+#include <mesh/io.h>
 
 int main(int argc, char ** argv)
 {
@@ -16,8 +17,10 @@ int main(int argc, char ** argv)
 
     auto gmsh = mesh::parseGmsh(meshFileName);
 
-    dumpPointsAndElements2d("", gmsh.nodeSection.nodes, gmsh.elementSection.elements);
-    dumpPhysicalGroups("groups.txt", gmsh.physicsSection);
+    // dumpPointsAndElements2d("", gmsh.nodeSection.nodes, gmsh.elementSection.elements);
+    // dumpPhysicalGroups("groups.txt", gmsh.physicsSection);
+
+    auto triMesh = mesh::parseTriangleGmsh(gmsh);
 
     return 0;
 }
