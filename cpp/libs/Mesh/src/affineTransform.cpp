@@ -10,8 +10,8 @@ namespace mesh
         result.b[1] = p0.y;
 
         result.m[0][0] = p1.x - p0.x;
-        result.m[0][1] = p1.y - p0.y;
-        result.m[1][0] = p2.x - p0.x;
+        result.m[0][1] = p2.x - p0.x;
+        result.m[1][0] = p1.y - p0.y;
         result.m[1][1] = p2.y - p0.y;
 
         return result;
