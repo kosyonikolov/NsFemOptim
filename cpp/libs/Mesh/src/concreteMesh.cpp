@@ -1,18 +1,50 @@
 #include <mesh/concreteMesh.h>
 
-#include <cassert>
 #include <algorithm>
+#include <cassert>
 
 #include <mesh/affineTransform.h>
 
 namespace mesh
 {
+    int ConcreteMesh::getElementSize() const
+    {
+        return baseElement.getNodeCount();
+    }
+
+    int ConcreteMesh::getBorderElementSize() const
+    {
+        return baseElement.ptsPerSide;
+    }
+
+    void ConcreteMesh::getElement(const int id, int * ids, Point * pts)
+    {
+        assert(id >= 0 && id < numElements);
+        const int elSize = getElementSize();
+        const int offset = id * elSize;
+        const int * srcIds = elements.data() + offset;
+
+        if (ids)
+        {
+            std::copy_n(srcIds, elSize, ids);
+        }
+        if (pts)
+        {
+            for (int i = 0; i < elSize; i++)
+            {
+                const int j = srcIds[i];
+                pts[i] = nodes[j];
+            }
+        }
+    }
+
     ConcreteMesh createMesh(const TriangleMesh & triMesh, const Element & baseElement)
     {
         ConcreteMesh result;
+        result.baseElement = baseElement;
 
         // Create all the nodes first, posibly adding new ones
-        
+
         // First copy the corner nodes
         result.nodes = triMesh.nodes;
         const int nVertices = result.nodes.size();
@@ -124,6 +156,7 @@ namespace mesh
         const int nodesPerElement = baseElement.getNodeCount();
         const int elementBufferSize = nodesPerElement * triMesh.elements.size();
         result.elements.resize(elementBufferSize);
+        result.elementTransforms.resize(result.numElements);
 
         const auto baseInternal = baseElement.internalNodes;
         const int numInternal = baseInternal.size();
@@ -132,6 +165,15 @@ namespace mesh
         for (int i = 0; i < triMesh.elements.size(); i++)
         {
             const auto & srcIds = triMesh.elements[i];
+
+            // Calc transform
+            std::array<Point, 3> cornerPts;
+            for (int i = 0; i < 3; i++)
+            {
+                cornerPts[i] = triMesh.nodes[srcIds[i]];
+            }
+            result.elementTransforms[i] = calcAffineTransformFromRefTriangle(cornerPts.data());
+
             int * ids = result.elements.data() + i * nodesPerElement;
             // Corners
             for (int c = 0; c < 3; c++)
@@ -149,7 +191,7 @@ namespace mesh
                     const int idB = srcIds[b];
                     int * extraIds = ids + a * elementSideStep + 1;
                     const bool ok = getSideExtraIds(idA, idB, extraIds, extraNodesPerSide);
-                    assert(ok); 
+                    assert(ok);
                 }
             }
 
@@ -199,4 +241,4 @@ namespace mesh
 
         return result;
     }
-}
+} // namespace mesh

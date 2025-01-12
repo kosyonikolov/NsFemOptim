@@ -1,11 +1,12 @@
+#include <cassert>
+#include <format>
 #include <iostream>
 #include <string>
-#include <format>
 
+#include <mesh/affineTransform.h>
+#include <mesh/concreteMesh.h>
 #include <mesh/gmsh.h>
 #include <mesh/io.h>
-#include <mesh/concreteMesh.h>
-#include <mesh/affineTransform.h>
 
 int main(int argc, char ** argv)
 {
@@ -35,7 +36,7 @@ int main(int argc, char ** argv)
             pts[i] = triMesh.nodes[ptIds[i]];
         }
 
-        std::array<mesh::Point, 3> refPts = {mesh::Point{0,0}, mesh::Point{1,0}, mesh::Point{0,1}};
+        std::array<mesh::Point, 3> refPts = {mesh::Point{0, 0}, mesh::Point{1, 0}, mesh::Point{0, 1}};
         const auto transform = mesh::calcAffineTransformFromRefTriangle(pts.data());
         for (int i = 0; i < 3; i++)
         {
@@ -43,17 +44,55 @@ int main(int argc, char ** argv)
             const auto target = pts[i];
             const float dx = test.x - target.x;
             const float dy = test.y - target.y;
-            std::cout << std::format("Target = ({}, {}), test = ({}, {}), delta = ({}, {})\n",
-                                     target.x, target.y,
-                                     test.x, test.y,
-                                     dx, dy);
+            std::cout << std::format("Target = ({}, {}), test = ({}, {}), delta = ({}, {})\n", target.x, target.y,
+                                     test.x, test.y, dx, dy);
         }
     }
 
     const auto elementType = mesh::ElementType::P2;
-    const auto baseElement = mesh::createElement(elementType); 
-    
+    const auto baseElement = mesh::createElement(elementType);
+
     auto mesh = mesh::createMesh(triMesh, baseElement);
+
+    if (true)
+    {
+        std::cout << "Testing if mesh is proper\n";
+
+        assert(mesh.numElements == triMesh.elements.size());
+        const int nElements = mesh.numElements;
+
+        const auto refPts = mesh.baseElement.getAllNodes();
+        const int elSize = refPts.size();
+        assert(elSize == mesh.getElementSize());
+
+        std::vector<int> ids(elSize);
+        std::vector<mesh::Point> targetPts(elSize);
+
+        const float eps = 1e-6f;
+        int failedCount = 0;
+
+        for (int i = 0; i < nElements; i++)
+        {
+            const auto transform = mesh.elementTransforms[i];
+            mesh.getElement(i, ids.data(), targetPts.data());
+
+            for (int k = 0; k < elSize; k++)
+            {
+                const auto test = transform(refPts[k]);
+                const auto target = targetPts[k];
+                const float dx = test.x - target.x;
+                const float dy = test.y - target.y;
+                if (std::abs(dx) >= eps || std::abs(dy) >= eps)
+                {
+                    std::cout << std::format("Target = ({}, {}), test = ({}, {}), delta = ({}, {})\n", target.x,
+                                             target.y, test.x, test.y, dx, dy);
+                    failedCount++;
+                }
+            }
+        }
+
+        std::cout << std::format("Failed points: {}\n", failedCount);
+    }
 
     return 0;
 }
