@@ -256,7 +256,7 @@ namespace mesh
             dst[ConcreteMesh::BorderElementOrder::TriangleElement] = src.element;
             dst[ConcreteMesh::BorderElementOrder::Side] = src.side;
             dst[ConcreteMesh::BorderElementOrder::Group] = src.group;
-            dst[ConcreteMesh::BorderElementOrder::TriangleElement] = idA;
+            dst[ConcreteMesh::BorderElementOrder::PtsStart] = idA;
             dst[borderElementStep - 1] = idB;
             if (extraNodesPerSide > 0)
             {

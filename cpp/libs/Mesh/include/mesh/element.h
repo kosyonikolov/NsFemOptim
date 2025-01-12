@@ -1,7 +1,6 @@
 #ifndef LIBS_MESH_INCLUDE_MESH_ELEMENT
 #define LIBS_MESH_INCLUDE_MESH_ELEMENT
 
-#include <array>
 #include <vector>
 
 #include <mesh/point.h>

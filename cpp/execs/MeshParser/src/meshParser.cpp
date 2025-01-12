@@ -7,6 +7,7 @@
 #include <mesh/concreteMesh.h>
 #include <mesh/gmsh.h>
 #include <mesh/io.h>
+#include <mesh/drawMesh.h>
 
 int main(int argc, char ** argv)
 {
@@ -49,7 +50,7 @@ int main(int argc, char ** argv)
         }
     }
 
-    const auto elementType = mesh::ElementType::P1;
+    const auto elementType = mesh::ElementType::P2;
     const auto baseElement = mesh::createElement(elementType);
 
     auto mesh = mesh::createMesh(triMesh, baseElement);
@@ -94,7 +95,7 @@ int main(int argc, char ** argv)
         std::cout << std::format("Failed points: {}\n", failedCount);
     }
 
-    if (true)
+    if (false)
     {
         // Print border elements
         const int nBorder = mesh.numBorderElements;
@@ -118,6 +119,9 @@ int main(int argc, char ** argv)
             std::cout << "]\n";
         }
     }
+
+    const cv::Mat img = mesh::drawMesh(mesh, 3500);
+    cv::imwrite("mesh.png", img);
 
     return 0;
 }
