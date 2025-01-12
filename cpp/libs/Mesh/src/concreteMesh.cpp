@@ -17,7 +17,7 @@ namespace mesh
         return baseElement.ptsPerSide;
     }
 
-    void ConcreteMesh::getElement(const int id, int * ids, Point * pts)
+    void ConcreteMesh::getElement(const int id, int * ids, Point * pts) const
     {
         assert(id >= 0 && id < numElements);
         const int elSize = getElementSize();
@@ -31,6 +31,33 @@ namespace mesh
         if (pts)
         {
             for (int i = 0; i < elSize; i++)
+            {
+                const int j = srcIds[i];
+                pts[i] = nodes[j];
+            }
+        }
+    }
+
+    void ConcreteMesh::getBorderElement(const int id, int & triangleId, int & side, int & group, int * ptsIds, Point * pts) const
+    {
+        assert(id >= 0 && id < numBorderElements);
+        const int nPts = baseElement.ptsPerSide;
+        const int step = BorderElementOrder::PtsStart + nPts;
+        const int offset = id * step;
+        const int * src = borderElements.data() + offset;
+
+        triangleId = src[BorderElementOrder::TriangleElement];
+        side = src[BorderElementOrder::Side];
+        group = src[BorderElementOrder::Group];
+
+        const int * srcIds = src + BorderElementOrder::PtsStart;
+        if (ptsIds)
+        {
+            std::copy_n(srcIds, nPts, ptsIds);
+        }
+        if (pts)
+        {
+            for (int i = 0; i < nPts; i++)
             {
                 const int j = srcIds[i];
                 pts[i] = nodes[j];
@@ -214,7 +241,7 @@ namespace mesh
 
         // Create border elements
         result.numBorderElements = triMesh.borderElements.size();
-        const int borderElementStep = baseElement.ptsPerSide + 1;
+        const int borderElementStep = baseElement.ptsPerSide + 3;
         const int borderBuffSize = borderElementStep * result.numBorderElements;
         result.borderElements.resize(borderBuffSize);
         for (int i = 0; i < result.numBorderElements; i++)
@@ -226,12 +253,14 @@ namespace mesh
             const int idB = elemPtIds[tSide.to];
 
             int * dst = result.borderElements.data() + i * borderElementStep;
-            dst[0] = src.group;
-            dst[1] = idA;
+            dst[ConcreteMesh::BorderElementOrder::TriangleElement] = src.element;
+            dst[ConcreteMesh::BorderElementOrder::Side] = src.side;
+            dst[ConcreteMesh::BorderElementOrder::Group] = src.group;
+            dst[ConcreteMesh::BorderElementOrder::TriangleElement] = idA;
             dst[borderElementStep - 1] = idB;
             if (extraNodesPerSide > 0)
             {
-                const bool ok = getSideExtraIds(idA, idB, dst + 2, extraNodesPerSide);
+                const bool ok = getSideExtraIds(idA, idB, dst + 4, extraNodesPerSide);
                 assert(ok);
             }
         }

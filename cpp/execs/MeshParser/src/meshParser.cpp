@@ -49,7 +49,7 @@ int main(int argc, char ** argv)
         }
     }
 
-    const auto elementType = mesh::ElementType::P2;
+    const auto elementType = mesh::ElementType::P1;
     const auto baseElement = mesh::createElement(elementType);
 
     auto mesh = mesh::createMesh(triMesh, baseElement);
@@ -92,6 +92,31 @@ int main(int argc, char ** argv)
         }
 
         std::cout << std::format("Failed points: {}\n", failedCount);
+    }
+
+    if (true)
+    {
+        // Print border elements
+        const int nBorder = mesh.numBorderElements;
+        const int borderElSize = mesh.getBorderElementSize();
+        std::vector<int> ids(borderElSize);
+        for (int i = 0; i < nBorder; i++)
+        {
+            int triId, side, group;
+            mesh.getBorderElement(i, triId, side, group, ids.data(), 0);
+            std::cout << std::format("Border element {}: tri = {}, side = {}, group = {}, ids = [", i, triId, side,
+                                     group);
+
+            for (int j = 0; j < borderElSize; j++)
+            {
+                std::cout << ids[j];
+                if (j != borderElSize - 1)
+                {
+                    std::cout << " ";
+                }
+            }
+            std::cout << "]\n";
+        }
     }
 
     return 0;
