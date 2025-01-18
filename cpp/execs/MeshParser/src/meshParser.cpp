@@ -98,6 +98,7 @@ int main(int argc, char ** argv)
         }
     }
 
+    testShapeFunctions<el::Type::P0>();
     testShapeFunctions<el::Type::P1>();
     testShapeFunctions<el::Type::P2>();
 
@@ -196,7 +197,7 @@ int main(int argc, char ** argv)
         }
     }
 
-    if (false)
+    if (true)
     {
         const cv::Mat img = mesh::drawMesh(mesh, 3500);
         cv::imwrite("mesh.png", img);

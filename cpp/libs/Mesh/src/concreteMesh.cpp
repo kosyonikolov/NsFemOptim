@@ -188,7 +188,13 @@ namespace mesh
 
         const auto baseInternal = baseElement.internalNodes;
         const int numInternal = baseInternal.size();
-        const int elementSideStep = baseElement.ptsPerSide - 1;
+        const int elementSideStep = std::max(0, baseElement.ptsPerSide - 1);
+
+        if (baseElement.type == el::Type::P0)
+        {
+            // The original corners do not participate in the mesh
+            result.nodes.clear();
+        }
 
         for (int i = 0; i < triMesh.elements.size(); i++)
         {
@@ -205,11 +211,14 @@ namespace mesh
 
             int * ids = result.elements.data() + i * nodesPerElement;
             // Corners
-            for (int c = 0; c < 3; c++)
+            if (elementSideStep > 0)
             {
-                ids[c * elementSideStep] = srcIds[c];
+                for (int c = 0; c < 3; c++)
+                {
+                    ids[c * elementSideStep] = srcIds[c];
+                }
             }
-
+            
             // Sides
             if (extraNodesPerSide > 0)
             {
@@ -227,10 +236,7 @@ namespace mesh
             // Internal - they are exclusive to the each element, so we can create them here
             if (numInternal > 0)
             {
-                const el::Point p0 = result.nodes[srcIds[0]];
-                const el::Point p1 = result.nodes[srcIds[1]];
-                const el::Point p2 = result.nodes[srcIds[2]];
-                const auto transform = calcAffineTransformFromRefTriangle(p0, p1, p2);
+                const auto & transform = result.elementTransforms[i];
                 int * internalIds = ids + 3 * elementSideStep;
                 for (int k = 0; k < numInternal; k++)
                 {
@@ -258,12 +264,15 @@ namespace mesh
             dst[ConcreteMesh::BorderElementOrder::TriangleElement] = src.element;
             dst[ConcreteMesh::BorderElementOrder::Side] = src.side;
             dst[ConcreteMesh::BorderElementOrder::Group] = src.group;
-            dst[ConcreteMesh::BorderElementOrder::PtsStart] = idA;
-            dst[borderElementStep - 1] = idB;
-            if (extraNodesPerSide > 0)
+            if (borderElementStep > 3)
             {
-                const bool ok = getSideExtraIds(idA, idB, dst + 4, extraNodesPerSide);
-                assert(ok);
+                dst[ConcreteMesh::BorderElementOrder::PtsStart] = idA;
+                dst[borderElementStep - 1] = idB;
+                if (extraNodesPerSide > 0)
+                {
+                    const bool ok = getSideExtraIds(idA, idB, dst + 4, extraNodesPerSide);
+                    assert(ok);
+                }
             }
         }
 

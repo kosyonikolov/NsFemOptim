@@ -56,11 +56,16 @@ namespace el
         return sum;
     }
 
+    template float value<Type::P0>(const float x, const float y, const float * nodeValues);
     template float value<Type::P1>(const float x, const float y, const float * nodeValues);
     template float value<Type::P2>(const float x, const float y, const float * nodeValues);
 
     ShapeFn getShapeFunction(const Type t)
     {
+        if (t == Type::P0)
+        {
+            return shape<Type::P0>;
+        }
         if (t == Type::P1)
         {
             return shape<Type::P1>;
@@ -74,6 +79,10 @@ namespace el
 
     ValueFn getValueFunction(const Type t)
     {
+        if (t == Type::P0)
+        {
+            return value<Type::P0>;
+        }
         if (t == Type::P1)
         {
             return value<Type::P1>;
