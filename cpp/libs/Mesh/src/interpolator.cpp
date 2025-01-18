@@ -1,12 +1,46 @@
 #include <mesh/interpolator.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <format>
+#include <iostream>
 #include <stdexcept>
 
 namespace mesh
 {
+    void Interpolator::selfCheckSegments()
+    {
+        const int nElements = mesh.numElements;
+        const int elSize = mesh.getElementSize();
+        std::vector<el::Point> pts(elSize);
+        std::cout << __FUNCTION__ << "\n";
+        for (int i = 0; i < nElements; i++)
+        {
+            mesh.getElement(i, 0, pts.data());
+            for (int k = 0; k < elSize; k++)
+            {
+                const int segId = getSegmentId(pts[k].x, pts[k].y);
+                if (segId < 0)
+                {
+                    std::cerr << std::format("Element {}, point {} ({}, {}): no segment ID\n", i, k, pts[k].x,
+                                             pts[k].y);
+                    continue;
+                }
+
+                const auto & storedElements = segmentElements[segId];
+                const auto it = std::find(storedElements.begin(), storedElements.end(), i);
+                if (it == storedElements.end())
+                {
+                    std::cerr << std::format(
+                        "Element {}, point {} ({}, {}): element ID not present in stored element for segment {}\n", i,
+                        k, pts[k].x, pts[k].y, segId);
+                }
+            }
+        }
+        std::cout << __FUNCTION__ << " - end\n";
+    }
+
     int Interpolator::getSegmentId(const float x, const float y) const
     {
         const float x1 = x - minX;
@@ -37,7 +71,8 @@ namespace mesh
         const auto refPt = transform(globalPt);
 
         // Check if inside triangle
-        if (refPt.x < 0 || refPt.x > 1 || refPt.y < 0 || refPt.y > 1 || refPt.x + refPt.y > 1)
+        const float tol = 1e-4;
+        if (refPt.x < -tol || refPt.x > 1 + tol || refPt.y < -tol || refPt.y > 1 + tol || refPt.x + refPt.y > 1 + tol)
         {
             return {};
         }
@@ -123,6 +158,7 @@ namespace mesh
         segmentElements.resize(nSeg);
 
         // Match elements with segments
+        const float tol = h * 0.01;
         for (int i = 0; i < nSeg; i++)
         {
             const int ix = i % cols;
@@ -135,11 +171,11 @@ namespace mesh
             for (int j = 0; j < nElems; j++)
             {
                 const auto & r = boundRects[j];
-                if (r.maxX < segX || r.maxY < segY)
+                if (r.maxX + tol < segX || r.maxY + tol < segY)
                 {
                     continue;
                 }
-                if (segX + segmWidth < r.minX || segY + segmHeight < r.minY)
+                if (segX + segmWidth < r.minX - tol || segY + segmHeight < r.minY - tol)
                 {
                     continue;
                 }
@@ -147,7 +183,8 @@ namespace mesh
             }
         }
 
-        // TODO Perform a self-check of the element here - the points of each element should map to a segment that contains their element
+        // Perform a self-check here - the points of each element should map to a segment that contains their element
+        selfCheckSegments();
 
         const int elemSize = mesh.getElementSize();
         ptIds.resize(elemSize);

@@ -203,6 +203,7 @@ int main(int argc, char ** argv)
 
     if (true)
     {
+        // Test interpolator
         mesh::Interpolator interp(mesh, 0.05);
         const int numNodes = mesh.nodes.size();
         std::vector<float> values = createTestValues(mesh);

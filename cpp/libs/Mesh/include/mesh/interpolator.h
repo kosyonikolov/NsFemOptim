@@ -1,8 +1,8 @@
 #ifndef LIBS_MESH_INCLUDE_MESH_INTERPOLATOR
 #define LIBS_MESH_INCLUDE_MESH_INTERPOLATOR
 
-#include <vector>
 #include <optional>
+#include <vector>
 
 #include <element/calc.h>
 
@@ -33,20 +33,22 @@ namespace mesh
         mutable int lastElementId = -1;
 
         // Allocate-once buffers for interpolation
-        mutable std::vector<int> ptIds; 
+        mutable std::vector<int> ptIds;
         mutable std::vector<float> ptValues;
+
+        void selfCheckSegments();
 
         int getSegmentId(const float x, const float y) const;
 
         std::optional<float> interpOnElement(const float x, const float y, const int elemId) const;
 
-    public:
+      public:
         Interpolator(const ConcreteMesh & mesh, const float h);
 
         std::optional<float> interpolate(const float x, const float y) const;
 
         void setValues(const std::vector<float> & values);
     };
-}
+} // namespace mesh
 
 #endif /* LIBS_MESH_INCLUDE_MESH_INTERPOLATOR */
