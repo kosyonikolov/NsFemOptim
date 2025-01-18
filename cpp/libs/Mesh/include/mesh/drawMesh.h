@@ -7,7 +7,12 @@
 
 namespace mesh
 {
+    class AbstractColorScale;
+    class Interpolator;
+
     cv::Mat drawMesh(const ConcreteMesh & mesh, const float scale);
+
+    cv::Mat drawValues(const Interpolator & interpolator, const AbstractColorScale & colorScale, const float scale);
 }
 
 #endif /* LIBS_MESH_INCLUDE_MESH_DRAWMESH */

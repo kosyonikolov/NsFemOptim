@@ -6,6 +6,7 @@
 #include <element/affineTransform.h>
 #include <element/calc.h>
 
+#include <mesh/colorScale.h>
 #include <mesh/concreteMesh.h>
 #include <mesh/drawMesh.h>
 #include <mesh/gmsh.h>
@@ -44,7 +45,7 @@ std::vector<float> createTestValues(const mesh::ConcreteMesh & mesh)
     const float ox = 1;
     const float oy = 0.2;
     const int n = mesh.nodes.size();
-    const float k = 1;
+    const float k = 3;
     std::vector<float> result(n);
     for (int i = 0; i < n; i++)
     {
@@ -228,6 +229,12 @@ int main(int argc, char ** argv)
                                          pt.y, target, v, delta);
             }
         }
+
+        mesh::SimpleColorScale scc(0, 1,
+                                   {cv::Scalar(128, 0, 0), cv::Scalar(0, 0, 128), cv::Scalar(0, 255, 255)});
+
+        cv::Mat valImg = mesh::drawValues(interp, scc, 1000);
+        cv::imwrite("values.png", valImg);
     }
 
     return 0;

@@ -2,6 +2,9 @@
 
 #include <limits>
 
+#include <mesh/interpolator.h>
+#include <mesh/colorScale.h>
+
 namespace mesh
 {
     cv::Mat drawMesh(const ConcreteMesh & mesh, const float scale)
@@ -94,6 +97,38 @@ namespace mesh
             const auto pt = cvPoint(mesh.nodes[i]);
             cv::circle(result, pt, 2, nodeColor, cv::FILLED);
             cv::putText(result, std::to_string(i), pt, cv::FONT_HERSHEY_SIMPLEX, 0.5, textColor);
+        }
+
+        return result;
+    }
+
+    cv::Mat drawValues(const Interpolator & interpolator, const AbstractColorScale & colorScale, const float scale)
+    {
+        const auto iSize = interpolator.getRange();
+        const int width = iSize.width * scale + 1;
+        const int height = iSize.height * scale + 1;
+        cv::Mat result = cv::Mat::zeros(height, width, CV_8UC3);
+
+        const float invS = 1.0f / scale;
+        for (int iy = 0; iy < height; iy++)
+        {
+            const float y = iy * invS + iSize.minY;
+            uint8_t * line = result.ptr<uint8_t>(iy);
+            for (int ix = 0; ix < width; ix++)
+            {
+                const float x = ix * invS + iSize.minX;
+                const auto val = interpolator.interpolate(x, y);
+                if (!val)
+                {
+                    continue;
+                } 
+                const auto color = colorScale(val.value());
+               
+                uint8_t * pix = line + 3 * ix;
+                pix[0] = color[0];
+                pix[1] = color[1];
+                pix[2] = color[2];
+            }
         }
 
         return result;

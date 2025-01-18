@@ -42,12 +42,22 @@ namespace mesh
 
         std::optional<float> interpOnElement(const float x, const float y, const int elemId) const;
 
-      public:
+    public:
+        struct InterpolatorRange
+        {
+            float minX;
+            float minY;
+            float width;
+            float height;
+        };
+
         Interpolator(const ConcreteMesh & mesh, const float h);
 
         std::optional<float> interpolate(const float x, const float y) const;
 
         void setValues(const std::vector<float> & values);
+
+        InterpolatorRange getRange() const;
     };
 } // namespace mesh
 

@@ -4,3 +4,5 @@ BraceWrapping:
   BeforeLambdaBody: true
 AlwaysBreakTemplateDeclarations: Yes
 NamespaceIndentation: All
+AccessModifierOffset: -4
+ColumnLimit: 0

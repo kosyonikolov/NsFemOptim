@@ -246,4 +246,14 @@ namespace mesh
         }
         this->values = values;
     }
+
+    Interpolator::InterpolatorRange Interpolator::getRange() const
+    {
+        InterpolatorRange result;
+        result.minX = minX;
+        result.width = width;
+        result.minY = minY;
+        result.height = height;
+        return result;
+    }
 } // namespace mesh
