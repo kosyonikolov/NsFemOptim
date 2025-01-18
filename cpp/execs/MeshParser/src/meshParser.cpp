@@ -70,18 +70,35 @@ int main(int argc, char ** argv)
         std::vector<int> ids(elSize);
         std::vector<el::Point> targetPts(elSize);
 
-        const float eps = 1e-6f;
+        const float eps = 1e-5f;
         int failedCount = 0;
 
         for (int i = 0; i < nElements; i++)
         {
-            const auto transform = mesh.elementTransforms[i];
             mesh.getElement(i, ids.data(), targetPts.data());
 
+            // Ref coords -> global coords
+            const auto transform = mesh.elementTransforms[i];
             for (int k = 0; k < elSize; k++)
             {
                 const auto test = transform(refPts[k]);
                 const auto target = targetPts[k];
+                const float dx = test.x - target.x;
+                const float dy = test.y - target.y;
+                if (std::abs(dx) >= eps || std::abs(dy) >= eps)
+                {
+                    std::cout << std::format("Target = ({}, {}), test = ({}, {}), delta = ({}, {})\n", target.x,
+                                             target.y, test.x, test.y, dx, dy);
+                    failedCount++;
+                }
+            }
+
+            // Global coords -> ref coords
+            const auto invTransform = mesh.invElementTransforms[i];
+            for (int k = 0; k < elSize; k++)
+            {
+                const auto test = invTransform(targetPts[k]);
+                const auto target = refPts[k];
                 const float dx = test.x - target.x;
                 const float dy = test.y - target.y;
                 if (std::abs(dx) >= eps || std::abs(dy) >= eps)

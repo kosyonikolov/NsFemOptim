@@ -184,6 +184,7 @@ namespace mesh
         const int elementBufferSize = nodesPerElement * triMesh.elements.size();
         result.elements.resize(elementBufferSize);
         result.elementTransforms.resize(result.numElements);
+        result.invElementTransforms.resize(result.numElements);
 
         const auto baseInternal = baseElement.internalNodes;
         const int numInternal = baseInternal.size();
@@ -200,6 +201,7 @@ namespace mesh
                 cornerPts[i] = triMesh.nodes[srcIds[i]];
             }
             result.elementTransforms[i] = calcAffineTransformFromRefTriangle(cornerPts.data());
+            result.invElementTransforms[i] = el::invertAffineTransform(result.elementTransforms[i]);
 
             int * ids = result.elements.data() + i * nodesPerElement;
             // Corners

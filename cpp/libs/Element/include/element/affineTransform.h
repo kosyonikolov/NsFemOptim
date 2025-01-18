@@ -32,6 +32,8 @@ namespace el
     AffineTransform calcAffineTransformFromRefTriangle(const Point & p0, const Point & p1, const Point & p2);
 
     AffineTransform calcAffineTransformFromRefTriangle(const Point * trianglePoints);
+
+    AffineTransform invertAffineTransform(const AffineTransform & t);
 };
 
 #endif /* LIBS_ELEMENT_INCLUDE_ELEMENT_AFFINETRANSFORM */

@@ -30,6 +30,8 @@ namespace mesh
         // Size = NumElements
         // Transforms that map the reference triangle to each element
         std::vector<el::AffineTransform> elementTransforms;
+        // Inverse transforms: from global coords to reference coords on element
+        std::vector<el::AffineTransform> invElementTransforms;
 
         std::vector<std::string> groups;
 
