@@ -4,11 +4,57 @@
 #include <string>
 
 #include <element/affineTransform.h>
+#include <element/calc.h>
 
 #include <mesh/concreteMesh.h>
-#include <mesh/gmsh.h>
-#include <mesh/io.h>
 #include <mesh/drawMesh.h>
+#include <mesh/gmsh.h>
+#include <mesh/interpolator.h>
+#include <mesh/io.h>
+
+template <el::Type t>
+void testShapeFunctions()
+{
+    const auto elem = el::createElement(t);
+    constexpr int nDof = el::dof<t>();
+    const auto pts = elem.getAllNodes();
+    assert(nDof == pts.size());
+
+    const float eps = 1e-6;
+    std::array<float, nDof> shapeVals;
+    for (int i = 0; i < nDof; i++)
+    {
+        el::shape<t>(pts[i].x, pts[i].y, shapeVals.data());
+        for (int k = 0; k < nDof; k++)
+        {
+            const float target = k == i ? 1 : 0;
+            const float test = shapeVals[k];
+            const float delta = test - target;
+            if (std::abs(delta) > eps)
+            {
+                std::cerr << std::format("Shape function fail: i = {} ({}, {}), k = {} , target = {}, actual = {}\n", i,
+                                         pts[i].x, pts[i].y, k, target, test);
+            }
+        }
+    }
+}
+
+std::vector<float> createTestValues(const mesh::ConcreteMesh & mesh)
+{
+    const float ox = 1;
+    const float oy = 0.2;
+    const int n = mesh.nodes.size();
+    const float k = 1;
+    std::vector<float> result(n);
+    for (int i = 0; i < n; i++)
+    {
+        const float dx = mesh.nodes[i].x - ox;
+        const float dy = mesh.nodes[i].y - oy;
+        const float r2 = dx * dx + dy * dy;
+        result[i] = std::exp(-k * r2);
+    }
+    return result;
+}
 
 int main(int argc, char ** argv)
 {
@@ -51,8 +97,19 @@ int main(int argc, char ** argv)
         }
     }
 
+    testShapeFunctions<el::Type::P1>();
+    testShapeFunctions<el::Type::P2>();
+
     const auto elementType = el::Type::P2;
     const auto baseElement = el::createElement(elementType);
+
+    {
+        const auto nodes = baseElement.getAllNodes();
+        for (const auto & node : nodes)
+        {
+            std::cout << std::format("{} {}\n", node.x, node.y);
+        }
+    }
 
     auto mesh = mesh::createMesh(triMesh, baseElement);
 
@@ -138,8 +195,39 @@ int main(int argc, char ** argv)
         }
     }
 
-    const cv::Mat img = mesh::drawMesh(mesh, 3500);
-    cv::imwrite("mesh.png", img);
+    if (false)
+    {
+        const cv::Mat img = mesh::drawMesh(mesh, 3500);
+        cv::imwrite("mesh.png", img);
+    }
+
+    if (true)
+    {
+        mesh::Interpolator interp(mesh, 0.05);
+        const int numNodes = mesh.nodes.size();
+        std::vector<float> values = createTestValues(mesh);
+        interp.setValues(values);
+
+        for (int i = 0; i < numNodes; i++)
+        {
+            const auto pt = mesh.nodes[i];
+            const float target = values[i];
+            const auto test = interp.interpolate(pt.x, pt.y);
+            if (!test)
+            {
+                std::cerr << std::format("Failed to interpolate point ({}, {})\n", pt.x, pt.y);
+                continue;
+            }
+
+            const float v = test.value();
+            const float delta = v - target;
+            if (std::abs(delta) > 1e-6f)
+            {
+                std::cerr << std::format("Bad interpolation on ({}, {}) - expected {}, got {} (delta = {})\n", pt.x,
+                                         pt.y, target, v, delta);
+            }
+        }
+    }
 
     return 0;
 }

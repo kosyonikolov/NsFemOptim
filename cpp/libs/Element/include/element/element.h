@@ -8,8 +8,6 @@
 
 namespace el
 {
-    
-
     struct Element
     {
         Type type;
