@@ -1,9 +1,10 @@
 #ifndef LIBS_MESH_INCLUDE_MESH_CONCRETEMESH
 #define LIBS_MESH_INCLUDE_MESH_CONCRETEMESH
 
+#include <element/element.h>
+#include <element/affineTransform.h>
+
 #include <mesh/triMesh.h>
-#include <mesh/element.h>
-#include <mesh/affineTransform.h>
 
 namespace mesh
 {
@@ -17,8 +18,8 @@ namespace mesh
             PtsStart
         };
 
-        Element baseElement;
-        std::vector<Point> nodes;
+        el::Element baseElement;
+        std::vector<el::Point> nodes;
 
         int numElements;
         // Size = NumElements * NodesPerElement
@@ -28,7 +29,7 @@ namespace mesh
 
         // Size = NumElements
         // Transforms that map the reference triangle to each element
-        std::vector<AffineTransform> elementTransforms;
+        std::vector<el::AffineTransform> elementTransforms;
 
         std::vector<std::string> groups;
 
@@ -45,13 +46,13 @@ namespace mesh
 
         // Retrieve an element's ids and/or points - pointers can be null if they are not required
         // They should point to buffers with size at least getElementSize()
-        void getElement(const int id, int * ids, Point * pts) const;
+        void getElement(const int id, int * ids, el::Point * pts) const;
 
         void getBorderElement(const int id, int & triangleId, int & side, int & group, 
-                              int * ptsIds, Point * pts) const;
+                              int * ptsIds, el::Point * pts) const;
     };
 
-    ConcreteMesh createMesh(const TriangleMesh & triMesh, const Element & baseElement);
+    ConcreteMesh createMesh(const TriangleMesh & triMesh, const el::Element & baseElement);
 }
 
 #endif /* LIBS_MESH_INCLUDE_MESH_CONCRETEMESH */

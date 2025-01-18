@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cassert>
 
-#include <mesh/affineTransform.h>
+#include <element/affineTransform.h>
 
 namespace mesh
 {
@@ -17,7 +17,7 @@ namespace mesh
         return baseElement.ptsPerSide;
     }
 
-    void ConcreteMesh::getElement(const int id, int * ids, Point * pts) const
+    void ConcreteMesh::getElement(const int id, int * ids, el::Point * pts) const
     {
         assert(id >= 0 && id < numElements);
         const int elSize = getElementSize();
@@ -38,7 +38,7 @@ namespace mesh
         }
     }
 
-    void ConcreteMesh::getBorderElement(const int id, int & triangleId, int & side, int & group, int * ptsIds, Point * pts) const
+    void ConcreteMesh::getBorderElement(const int id, int & triangleId, int & side, int & group, int * ptsIds, el::Point * pts) const
     {
         assert(id >= 0 && id < numBorderElements);
         const int nPts = baseElement.ptsPerSide;
@@ -65,7 +65,7 @@ namespace mesh
         }
     }
 
-    ConcreteMesh createMesh(const TriangleMesh & triMesh, const Element & baseElement)
+    ConcreteMesh createMesh(const TriangleMesh & triMesh, const el::Element & baseElement)
     {
         ConcreteMesh result;
         result.baseElement = baseElement;
@@ -125,15 +125,15 @@ namespace mesh
             const float h = 1.0f / (extraNodesPerSide + 1);
             for (int idFrom = 0; idFrom < nVertices; idFrom++)
             {
-                const Point from = result.nodes[idFrom];
+                const el::Point from = result.nodes[idFrom];
                 for (auto & s : graph[idFrom])
                 {
-                    const Point to = result.nodes[s.to];
+                    const el::Point to = result.nodes[s.to];
                     for (int k = 1; k <= extraNodesPerSide; k++)
                     {
                         const float w = k * h;
                         const float compW = 1.0f - w;
-                        Point m;
+                        el::Point m;
                         m.x = compW * from.x + w * to.x;
                         m.y = compW * from.y + w * to.y;
                         s.extraPtIds.push_back(result.nodes.size());
@@ -194,7 +194,7 @@ namespace mesh
             const auto & srcIds = triMesh.elements[i];
 
             // Calc transform
-            std::array<Point, 3> cornerPts;
+            std::array<el::Point, 3> cornerPts;
             for (int i = 0; i < 3; i++)
             {
                 cornerPts[i] = triMesh.nodes[srcIds[i]];
@@ -225,14 +225,14 @@ namespace mesh
             // Internal - they are exclusive to the each element, so we can create them here
             if (numInternal > 0)
             {
-                const Point p0 = result.nodes[srcIds[0]];
-                const Point p1 = result.nodes[srcIds[1]];
-                const Point p2 = result.nodes[srcIds[2]];
+                const el::Point p0 = result.nodes[srcIds[0]];
+                const el::Point p1 = result.nodes[srcIds[1]];
+                const el::Point p2 = result.nodes[srcIds[2]];
                 const auto transform = calcAffineTransformFromRefTriangle(p0, p1, p2);
                 int * internalIds = ids + 3 * elementSideStep;
                 for (int k = 0; k < numInternal; k++)
                 {
-                    Point newPoint = transform.apply(baseInternal[k]);
+                    el::Point newPoint = transform.apply(baseInternal[k]);
                     internalIds[k] = result.nodes.size();
                     result.nodes.push_back(newPoint);
                 }

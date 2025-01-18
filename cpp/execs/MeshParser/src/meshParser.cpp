@@ -3,7 +3,8 @@
 #include <iostream>
 #include <string>
 
-#include <mesh/affineTransform.h>
+#include <element/affineTransform.h>
+
 #include <mesh/concreteMesh.h>
 #include <mesh/gmsh.h>
 #include <mesh/io.h>
@@ -31,14 +32,14 @@ int main(int argc, char ** argv)
     {
         // Test affine transform
         auto ptIds = triMesh.elements[0];
-        std::array<mesh::Point, 3> pts;
+        std::array<el::Point, 3> pts;
         for (int i = 0; i < 3; i++)
         {
             pts[i] = triMesh.nodes[ptIds[i]];
         }
 
-        std::array<mesh::Point, 3> refPts = {mesh::Point{0, 0}, mesh::Point{1, 0}, mesh::Point{0, 1}};
-        const auto transform = mesh::calcAffineTransformFromRefTriangle(pts.data());
+        std::array<el::Point, 3> refPts = {el::Point{0, 0}, el::Point{1, 0}, el::Point{0, 1}};
+        const auto transform = el::calcAffineTransformFromRefTriangle(pts.data());
         for (int i = 0; i < 3; i++)
         {
             const auto test = transform(refPts[i]);
@@ -50,8 +51,8 @@ int main(int argc, char ** argv)
         }
     }
 
-    const auto elementType = mesh::ElementType::P2;
-    const auto baseElement = mesh::createElement(elementType);
+    const auto elementType = el::Type::P2;
+    const auto baseElement = el::createElement(elementType);
 
     auto mesh = mesh::createMesh(triMesh, baseElement);
 
@@ -67,7 +68,7 @@ int main(int argc, char ** argv)
         assert(elSize == mesh.getElementSize());
 
         std::vector<int> ids(elSize);
-        std::vector<mesh::Point> targetPts(elSize);
+        std::vector<el::Point> targetPts(elSize);
 
         const float eps = 1e-6f;
         int failedCount = 0;

@@ -1,22 +1,18 @@
-#ifndef LIBS_MESH_INCLUDE_MESH_ELEMENT
-#define LIBS_MESH_INCLUDE_MESH_ELEMENT
+#ifndef LIBS_ELEMENT_INCLUDE_ELEMENT_ELEMENT
+#define LIBS_ELEMENT_INCLUDE_ELEMENT_ELEMENT
 
 #include <vector>
 
-#include <mesh/point.h>
+#include <element/point.h>
+#include <element/type.h>
 
-namespace mesh
+namespace el
 {
-    enum class ElementType
-    {
-        P0,
-        P1,
-        P2,
-    };
+    
 
     struct Element
     {
-        ElementType type;
+        Type type;
 
         int ptsPerSide;
 
@@ -29,7 +25,7 @@ namespace mesh
         std::vector<Point> getAllNodes() const;
     };
 
-    Element createElement(const ElementType type);
+    Element createElement(const Type type);
 }
 
-#endif /* LIBS_MESH_INCLUDE_MESH_ELEMENT */
+#endif /* LIBS_ELEMENT_INCLUDE_ELEMENT_ELEMENT */

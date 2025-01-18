@@ -24,7 +24,7 @@ namespace mesh
         const float spanY = maxY - minY;
         const int borderPx = 100;
         
-        auto cvPoint = [&](const mesh::Point & p)
+        auto cvPoint = [&](const el::Point & p)
         {
             const int x = borderPx + scale * (p.x - minX);
             const int y = borderPx + scale * (p.y - minY);
@@ -37,7 +37,7 @@ namespace mesh
 
         // Draw triangles
         const cv::Scalar triColor(0, 0, 255);
-        std::array<mesh::Point, 3> refPts = {mesh::Point{0,0}, mesh::Point{0,1}, mesh::Point{1,0}};
+        std::array<el::Point, 3> refPts = {el::Point{0,0}, el::Point{0,1}, el::Point{1,0}};
         std::array<cv::Point2i, 3> cvTriPts;
         const int nElem = mesh.numElements;
         for (int i = 0; i < nElem; i++)
@@ -69,7 +69,7 @@ namespace mesh
 
         const int nBorderElements = mesh.numBorderElements;
         const int borderElSize = mesh.getBorderElementSize();
-        std::vector<mesh::Point> borderPts(borderElSize);
+        std::vector<el::Point> borderPts(borderElSize);
         for (int i = 0; i < nBorderElements; i++)
         {
             int tri, side, group;

@@ -1,9 +1,9 @@
-#ifndef LIBS_MESH_INCLUDE_MESH_AFFINETRANSFORM
-#define LIBS_MESH_INCLUDE_MESH_AFFINETRANSFORM
+#ifndef LIBS_ELEMENT_INCLUDE_ELEMENT_AFFINETRANSFORM
+#define LIBS_ELEMENT_INCLUDE_ELEMENT_AFFINETRANSFORM
 
-#include <mesh/point.h>
+#include <element/point.h>
 
-namespace mesh
+namespace el
 {
     struct AffineTransform
     {
@@ -34,4 +34,4 @@ namespace mesh
     AffineTransform calcAffineTransformFromRefTriangle(const Point * trianglePoints);
 };
 
-#endif /* LIBS_MESH_INCLUDE_MESH_AFFINETRANSFORM */
+#endif /* LIBS_ELEMENT_INCLUDE_ELEMENT_AFFINETRANSFORM */

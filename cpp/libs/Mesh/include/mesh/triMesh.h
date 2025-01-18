@@ -5,7 +5,7 @@
 #include <array>
 #include <string>
 
-#include <mesh/point.h>
+#include <element/point.h>
 
 namespace mesh
 {
@@ -45,7 +45,7 @@ namespace mesh
     // Meshes for concrete elements can be generated from it
     struct TriangleMesh
     {
-        std::vector<Point> nodes;
+        std::vector<el::Point> nodes;
         std::vector<std::array<int, 3>> elements;
         std::vector<std::string> groups;
         std::vector<BorderElement> borderElements;

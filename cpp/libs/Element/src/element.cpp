@@ -1,10 +1,10 @@
-#include <mesh/element.h>
+#include <element/element.h>
 
 #include <stdexcept>
 #include <cassert>
 #include <algorithm>
 
-namespace mesh
+namespace el
 {
     int Element::getNodeCount() const
     {
@@ -60,23 +60,23 @@ namespace mesh
         return result;
     };
 
-    Element createElement(const ElementType type)
+    Element createElement(const Type type)
     {
         Element result;
         result.type = type;
 
-        if (type == ElementType::P0)
+        if (type == Type::P0)
         {
             result.ptsPerSide = 0;
             result.internalNodes = {Point{1.0 / 3, 1.0 / 3}};
             return result;
         }
-        if (type == ElementType::P1)
+        if (type == Type::P1)
         {
             result.ptsPerSide = 2;
             return result;
         }
-        if (type == ElementType::P2)
+        if (type == Type::P2)
         {
             result.ptsPerSide = 3;
             return result;

@@ -1,6 +1,6 @@
-#include <mesh/affineTransform.h>
+#include <element/affineTransform.h>
 
-namespace mesh
+namespace el
 {
     AffineTransform calcAffineTransformFromRefTriangle(const Point & p0, const Point & p1, const Point & p2)
     {
