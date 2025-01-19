@@ -1,8 +1,9 @@
 #include <element/triangleIntegrator.h>
 
 #include <array>
-#include <stdexcept>
 #include <format>
+#include <stdexcept>
+// #include <iostream>
 
 namespace el
 {
@@ -58,6 +59,18 @@ namespace el
         return j;
     }
 
+    cv::Mat calcB(const AffineTransform & t)
+    {
+        cv::Mat b(2, 2, CV_32FC1);
+
+        b.at<float>(0, 0) = t.m[1][1];
+        b.at<float>(0, 1) = -t.m[1][0];
+        b.at<float>(1, 0) = -t.m[0][1];
+        b.at<float>(1, 1) = t.m[0][0];
+
+        return b;
+    }
+
     float det(const Mat22 & m)
     {
         return m[0][0] * m[1][1] - m[0][1] * m[1][0];
@@ -68,11 +81,13 @@ namespace el
     {
         nDof = dof(element.type);
         shapeFn = getShapeFunction(element.type);
+        shapeGradFn = getShapeGradFunction(element.type);
         valueFn = getValueFunction(element.type);
 
         intPts = getIntegrationPoints(degree);
 
         phi.resize(nDof);
+        grad.create(2, nDof, CV_32FC1);
     }
 
     void TriangleIntegrator::integrateLocalMassMatrix(const AffineTransform & t, cv::Mat & dst) const
@@ -106,5 +121,32 @@ namespace el
         const auto j = calcJacobian(t);
         const float absDetJ = std::abs(det(j));
         dst *= absDetJ;
+    }
+
+    void TriangleIntegrator::integrateLocalStiffnessMatrix(const AffineTransform & t, cv::Mat & dst) const
+    {
+        dst.create(nDof, nDof, CV_32FC1);
+        dst.setTo(0);
+
+        const auto j = calcJacobian(t);
+        const float absDetJ = std::abs(det(j));
+
+        const auto b = calcB(t);
+        const auto btb = b.t() * b;
+
+        // std::cout << "absDetJ: " << absDetJ << "\n";
+        // std::cout << "B:\n" << b << "\n";
+        // std::cout << "BTB:\n" << btb << "\n";
+
+        float * gradX = grad.ptr<float>(0);
+        float * gradY = grad.ptr<float>(1);
+        for (const auto [x, y, w] : intPts)
+        {
+            shapeGradFn(x, y, gradX, gradY);
+            const float totalW = w * absDetJ;
+            const cv::Mat contrib = grad.t() * btb * grad * totalW;
+            // std::cout << contrib << "\n";
+            dst += contrib; 
+        }
     }
 } // namespace el

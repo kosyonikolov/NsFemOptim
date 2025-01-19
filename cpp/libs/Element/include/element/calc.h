@@ -6,6 +6,7 @@
 namespace el
 {
     using ShapeFn = void(*)(const float, const float, float *);
+    using ShapeGradFn = void(*)(const float, const float, float *, float *);
     using ValueFn = float(*)(const float, const float, const float *);
 
     template<Type t>
@@ -33,9 +34,14 @@ namespace el
     void shape(const float x, const float y, float * dst);
 
     template<Type t>
+    void shapeGrad(const float x, const float y, float * dstX, float * dstY);
+
+    template<Type t>
     float value(const float x, const float y, const float * nodeValues);
 
     ShapeFn getShapeFunction(const Type t);
+
+    ShapeGradFn getShapeGradFunction(const Type t);
 
     ValueFn getValueFunction(const Type t);
 }

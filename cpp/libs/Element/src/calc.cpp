@@ -61,6 +61,63 @@ namespace el
         dst[5] = 4 * y - 4 * y2 - 4 * xy;
     }
 
+    // ==========================================
+    // =========== Gradient functions ===========
+    // ==========================================
+
+    template<> void shapeGrad<Type::P0>(const float, const float, float * dstX, float * dstY)
+    {
+        dstX[0] = 0;
+        dstY[0] = 0;
+    }
+    
+    template<> void shapeGrad<Type::P1>(const float, const float, float * dstX, float * dstY)
+    {
+        // clang-format off
+        //      1 - x - y
+        dstX[0] = -1;
+        dstY[0] = -1;
+
+        //        x
+        dstX[1] = 1;
+        dstY[1] = 0;
+
+        //        y
+        dstX[2] = 0;
+        dstY[2] = 1;
+        // clang-format on
+    }
+
+    template<> void shapeGrad<Type::P2>(const float x, const float y, float * dstX, float * dstY)
+    {
+        // clang-format off
+        //     1 - 3 * x - 3 * y + 2 * x2 + 2 * y2 + 4 * xy
+        dstX[0] = -3             + 4 * x           + 4 * y;
+        dstY[0] =         -3              + 4 * y  + 4 * x;
+
+        //        4 * x - 4 * x2 - 4 * xy
+        dstX[1] = 4     - 8 * x  - 4 * y;
+        dstY[1] =                - 4 * x;
+
+        //        -x + 2 * x2
+        dstX[2] = -1 + 4 * x;
+        dstY[2] = 0;
+
+        //        4 * xy
+        dstX[3] = 4 * y;
+        dstY[3] = 4 * x;
+
+        //        -y + 2 * y2
+        dstX[4] = 0;
+        dstY[4] = -1 + 4 * y;
+
+        //        4 * y - 4 * y2 - 4 * xy
+        dstX[5] =                - 4 * y;
+        dstY[5] = 4     - 8 * y  - 4 * x;
+        //clang-format on
+    }
+
+
     template<Type t>
     float value(const float x, const float y, const float * nodeValues)
     {
@@ -92,6 +149,23 @@ namespace el
         if (t == Type::P2)
         {
             return shape<Type::P2>;
+        }
+        return 0;
+    }
+
+    ShapeGradFn getShapeGradFunction(const Type t)
+    {
+        if (t == Type::P0)
+        {
+            return shapeGrad<Type::P0>;
+        }
+        if (t == Type::P1)
+        {
+            return shapeGrad<Type::P1>;
+        }
+        if (t == Type::P2)
+        {
+            return shapeGrad<Type::P2>;
         }
         return 0;
     }

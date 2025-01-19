@@ -4,6 +4,18 @@
 
 namespace el
 {
+    AffineTransform AffineTransform::identity()
+    {
+        AffineTransform t;
+        t.m[0][0] = 1;
+        t.m[0][1] = 0;
+        t.m[1][0] = 0;
+        t.m[1][1] = 1;
+        t.b[0] = 0;
+        t.b[1] = 0;
+        return t;
+    }
+
     AffineTransform calcAffineTransformFromRefTriangle(const Point & p0, const Point & p1, const Point & p2)
     {
         AffineTransform result;

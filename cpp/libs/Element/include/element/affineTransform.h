@@ -27,6 +27,8 @@ namespace el
         {
             return apply(src);
         }
+
+        static AffineTransform identity();
     };
 
     AffineTransform calcAffineTransformFromRefTriangle(const Point & p0, const Point & p1, const Point & p2);

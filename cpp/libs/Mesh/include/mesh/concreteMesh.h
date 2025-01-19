@@ -52,6 +52,9 @@ namespace mesh
 
         void getBorderElement(const int id, int & triangleId, int & side, int & group, 
                               int * ptsIds, el::Point * pts) const;
+
+        // -1 if it doesn't exist
+        int findGroupId(const std::string & name) const;
     };
 
     ConcreteMesh createMesh(const TriangleMesh & triMesh, const el::Element & baseElement);

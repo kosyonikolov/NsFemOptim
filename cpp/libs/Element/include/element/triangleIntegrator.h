@@ -30,17 +30,21 @@ namespace el
 
         int nDof;
         ShapeFn shapeFn;
+        ShapeGradFn shapeGradFn;
         ValueFn valueFn;
 
         std::vector<IntegrationPoint> intPts;
 
         // Alloc-once buffers
         mutable std::vector<float> phi;
+        mutable cv::Mat grad; // shape = (2, DOF), first row = gradX, second row = gradY
 
     public:
         TriangleIntegrator(const Element & element, const int degree);
 
         void integrateLocalMassMatrix(const AffineTransform & t, cv::Mat & dst) const;
+
+        void integrateLocalStiffnessMatrix(const AffineTransform & t, cv::Mat & dst) const;
 
         template<typename F>
         void integrateLocalLoadVector(const AffineTransform & t, F func, std::vector<float> & dst)

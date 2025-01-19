@@ -65,6 +65,16 @@ namespace mesh
         }
     }
 
+    int ConcreteMesh::findGroupId(const std::string & name) const
+    {
+        auto it = std::find(groups.begin(), groups.end(), name);
+        if (it == groups.end())
+        {
+            return -1;
+        }
+        return it - groups.begin();
+    }
+
     ConcreteMesh createMesh(const TriangleMesh & triMesh, const el::Element & baseElement)
     {
         ConcreteMesh result;
