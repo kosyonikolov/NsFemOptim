@@ -1,9 +1,28 @@
 #include <element/calc.h>
 
 #include <array>
+#include <stdexcept>
+#include <format>
 
 namespace el
 {
+    int dof(const Type & t)
+    {
+        if (t == Type::P0)
+        {
+            return dof<Type::P0>();
+        }
+        if (t == Type::P1)
+        {
+            return dof<Type::P1>();
+        }
+        if (t == Type::P2)
+        {
+            return dof<Type::P2>();
+        }
+        throw std::invalid_argument(std::format("{}: Bad element type [{}]", __FUNCTION__, static_cast<int>(t)));
+    }
+
     // ==========================================
     // ============ Shape functions =============
     // ==========================================

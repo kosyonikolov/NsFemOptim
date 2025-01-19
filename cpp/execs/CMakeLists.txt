@@ -1,2 +1,3 @@
 add_subdirectory(MeshParser)
 add_subdirectory(MatrixTest)
+add_subdirectory(L2Projection)

@@ -26,6 +26,8 @@ namespace el
         return 6;
     }
 
+    int dof(const Type & t);
+
     // Calculates the shape functions on the reference triangles at point (x, y)
     template<Type t>
     void shape(const float x, const float y, float * dst);
