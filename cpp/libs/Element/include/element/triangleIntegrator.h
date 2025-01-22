@@ -12,7 +12,7 @@
 namespace el
 {
     using Mat22 = std::array<std::array<float, 2>, 2>;
-    
+
     Mat22 calcJacobian(const AffineTransform & t);
 
     float det(const Mat22 & m);
@@ -33,7 +33,11 @@ namespace el
         ShapeGradFn shapeGradFn;
         ValueFn valueFn;
 
+        // 2D points on reference triangle
         std::vector<IntegrationPoint> intPts;
+
+        // 1D points on [0, 1] - y component is zero
+        std::vector<IntegrationPoint> lineIntPts;
 
         // Alloc-once buffers
         mutable std::vector<float> phi;
@@ -46,7 +50,7 @@ namespace el
 
         void integrateLocalStiffnessMatrix(const AffineTransform & t, cv::Mat & dst) const;
 
-        template<typename F>
+        template <typename F>
         void integrateLocalLoadVector(const AffineTransform & t, F func, std::vector<float> & dst)
         {
             dst.resize(nDof);
@@ -61,6 +65,44 @@ namespace el
                 const auto globalPt = t(Point{x, y});
                 const float v = func(globalPt.x, globalPt.y);
                 const float totalW = w * absDetJ * v;
+                for (int i = 0; i < nDof; i++)
+                {
+                    dst[i] += phi[i] * totalW;
+                }
+            }
+        }
+
+        template <typename F>
+        void integrateLocalBorderLoadVector(const AffineTransform & tFwd, F flowFunc, const int side, std::vector<float> & dst)
+        {
+            assert(side >= 0 && side < 6);
+            const int sideId = side / 2;
+
+            constexpr std::array<Point, 3> refPts = {Point{0, 0}, Point{1, 0}, Point{0, 1}};
+            const Point refStart = refPts[sideId];
+            const Point refEnd = refPts[(sideId + 1) % 3];
+
+            // Calculate length of side in global triangle
+            const auto globalStart = tFwd(refStart);
+            const auto globalEnd = tFwd(refEnd);
+            // const float globalSideLen = distance(globalStart, globalEnd);
+            // Calculate global normal
+            // Do not normalize it - this avoids an additional multiplication by its length
+            Point globalNormal = {globalEnd.y - globalStart.y, -(globalEnd.x - globalStart.x)};
+
+            dst.resize(nDof);
+            std::fill(dst.begin(), dst.end(), 0);
+
+            for (const auto [x, _, w] : lineIntPts)
+            {
+                const float cX = 1 - x;
+                const Point refPt{cX * refStart.x + x * refEnd.x, cX * refStart.y + x * refEnd.y};
+                const Point globalPt = tFwd(refPt);
+                const Point globalFlow = flowFunc(globalPt);
+                const float normalFlow = globalFlow.x * globalNormal.x + globalFlow.y * globalNormal.y;
+                const float totalW = w * normalFlow;
+
+                shapeFn(refPt.x, refPt.y, phi.data());
                 for (int i = 0; i < nDof; i++)
                 {
                     dst[i] += phi[i] * totalW;

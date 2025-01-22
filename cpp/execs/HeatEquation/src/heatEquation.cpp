@@ -273,6 +273,307 @@ std::vector<float> solveHeatEquation(const mesh::ConcreteMesh & mesh)
     return result;
 }
 
+// Neumann (x1) and Dirichlet (x2) conditions
+std::vector<float> solveHeatEquation2(const mesh::ConcreteMesh & mesh)
+{
+    const int idLeft = mesh.findGroupId("Left");
+    if (idLeft < 0)
+    {
+        throw std::invalid_argument("No left border!");
+    }
+
+    const int idRight = mesh.findGroupId("Right");
+    if (idRight < 0)
+    {
+        throw std::invalid_argument("No right border!");
+    }
+
+    const int idCircle = mesh.findGroupId("Circle");
+    if (idCircle < 0)
+    {
+        throw std::invalid_argument("No circle border!");
+    }
+
+    const float rightVal = 10;
+    const float circleVal = -50;
+
+    const int numNodes = mesh.nodes.size();
+    const std::vector<int> borderIds{ idRight, idCircle };
+    const std::vector<float> borderValues{ rightVal, circleVal };
+    const auto dirichletNodes = extractDirichletNodesSimple(mesh, borderIds, borderValues);
+    const auto internalNodes = extractInternalNodes(numNodes, dirichletNodes);
+
+    auto flow = [](const el::Point & pt) -> el::Point
+    {
+        const float s = (pt.y - 0.2);
+        el::Point r;
+        // r.x = -0.001 * (0.3f - 4.5f * s*s);
+        r.x = -0.001 * std::exp(-100 * s * s);
+        r.y = 0;
+        return r;
+    };
+
+    el::TriangleIntegrator integrator(mesh.baseElement, 4);
+    const int nElem = mesh.numElements;
+    const int elSize = mesh.getElementSize();
+
+    SpMat m(numNodes, numNodes);
+
+    // Assemble
+    std::vector<Triplet> triplets;
+
+    std::vector<int> ids(elSize);
+    std::vector<el::Point> pts(elSize);
+    cv::Mat localStiffnessMatrix;
+    for (int i = 0; i < nElem; i++)
+    {
+        mesh.getElement(i, ids.data(), pts.data());
+        const auto t = mesh.elementTransforms[i];
+
+        integrator.integrateLocalStiffnessMatrix(t, localStiffnessMatrix);
+        assert(elSize == localStiffnessMatrix.cols);
+        assert(elSize == localStiffnessMatrix.rows);
+
+        // Accumulate
+        for (int r = 0; r < elSize; r++)
+        {
+            const int i = ids[r];
+            for (int c = 0; c < elSize; c++)
+            {
+                const int j = ids[c];
+                const Triplet triplet(i, j, localStiffnessMatrix.at<float>(r, c));
+                triplets.push_back(triplet);
+            }
+        }
+    }
+
+    // Build matrix
+    m.setFromTriplets(triplets.begin(), triplets.end());
+
+    // Build vector
+    Vector b0(numNodes);
+    b0.setZero();
+
+    const int numBorderElements = mesh.numBorderElements;
+    std::vector<float> localLoadVector;
+    for (int i = 0; i < numBorderElements; i++)
+    {
+        int triangleId, side, group;
+        mesh.getBorderElement(i, triangleId, side, group, 0, 0);
+        if (group != idLeft)
+        {
+            continue;
+        }
+        mesh.getElement(triangleId, ids.data(), 0);
+
+        const auto & t = mesh.elementTransforms[triangleId];
+        integrator.integrateLocalBorderLoadVector(t, flow, side, localLoadVector);
+        
+        
+        // Accumulate
+        assert(localLoadVector.size() == elSize);
+        for (int k = 0; k < elSize; k++)
+        {
+            const int j = ids[k];
+            b0[j] += localLoadVector[k];
+        }
+    }
+
+    // Handle dirichlet nodes
+    Vector d(numNodes);
+    d.setZero();
+    for (const auto [id, val] : dirichletNodes)
+    {
+        d[id] = val;
+    }
+
+    // Compose system for internal nodes
+    const int numInternal = internalNodes.size();
+    Vector sub = m * d;
+    Vector bInternal(numInternal);
+    const auto internalTriplets = projectTriplets(numNodes, triplets, internalNodes);
+    SpMat mInternal(numInternal, numInternal);
+    mInternal.setFromTriplets(internalTriplets.begin(), internalTriplets.end());
+    for (int i = 0; i < numInternal; i++)
+    {
+        const int j = internalNodes[i];
+        bInternal[i] = b0[j] - sub[j];
+    }
+
+    // Solve for internal nodes
+    Eigen::SimplicialLDLT<SpMat> solver(mInternal);
+    Eigen::Vector<SolType, Eigen::Dynamic> qInt = solver.solve(bInternal);
+
+    std::vector<float> result(numNodes);
+    for (int i = 0; i < numInternal; i++)
+    {
+        const int j = internalNodes[i];
+        result[j] = qInt[i];
+    }
+    for (const auto [j, value] : dirichletNodes)
+    {
+        result[j] = value;
+    }
+
+    return result;
+}
+
+// Neumann (x2) and Dirichlet (x1) conditions
+std::vector<float> solveHeatEquation3(const mesh::ConcreteMesh & mesh)
+{
+    const int idLeft = mesh.findGroupId("Left");
+    if (idLeft < 0)
+    {
+        throw std::invalid_argument("No left border!");
+    }
+
+    const int idRight = mesh.findGroupId("Right");
+    if (idRight < 0)
+    {
+        throw std::invalid_argument("No right border!");
+    }
+
+    const int idCircle = mesh.findGroupId("Circle");
+    if (idCircle < 0)
+    {
+        throw std::invalid_argument("No circle border!");
+    }
+
+    const float rightVal = 10;
+
+    const int numNodes = mesh.nodes.size();
+    const std::vector<int> borderIds{ idRight };
+    const std::vector<float> borderValues{ rightVal };
+    const auto dirichletNodes = extractDirichletNodesSimple(mesh, borderIds, borderValues);
+    const auto internalNodes = extractInternalNodes(numNodes, dirichletNodes);
+
+    auto flow = [](const el::Point & pt) -> el::Point
+    {
+        const float s = (pt.y - 0.2);
+        el::Point r;
+        // r.x = -0.001 * (0.3f - 4.5f * s*s);
+        r.x = -0.001 * std::exp(-100 * s * s);
+        r.y = 0;
+        return r;
+    };
+
+    auto circleFlow = [](const el::Point & pt) -> el::Point
+    {
+        const el::Point center {0.2, 0.2};
+        const float dx = pt.x - center.x;
+        const float dy = pt.y - center.y;
+        const el::Point normal = el::normalize(el::Point{dx, dy});
+        const float k = 0.0003;
+        return {k * normal.x, k * normal.y};
+    };
+
+
+    el::TriangleIntegrator integrator(mesh.baseElement, 4);
+    const int nElem = mesh.numElements;
+    const int elSize = mesh.getElementSize();
+
+    SpMat m(numNodes, numNodes);
+
+    // Assemble
+    std::vector<Triplet> triplets;
+
+    std::vector<int> ids(elSize);
+    std::vector<el::Point> pts(elSize);
+    cv::Mat localStiffnessMatrix;
+    for (int i = 0; i < nElem; i++)
+    {
+        mesh.getElement(i, ids.data(), pts.data());
+        const auto t = mesh.elementTransforms[i];
+
+        integrator.integrateLocalStiffnessMatrix(t, localStiffnessMatrix);
+        assert(elSize == localStiffnessMatrix.cols);
+        assert(elSize == localStiffnessMatrix.rows);
+
+        // Accumulate
+        for (int r = 0; r < elSize; r++)
+        {
+            const int i = ids[r];
+            for (int c = 0; c < elSize; c++)
+            {
+                const int j = ids[c];
+                const Triplet triplet(i, j, localStiffnessMatrix.at<float>(r, c));
+                triplets.push_back(triplet);
+            }
+        }
+    }
+
+    // Build matrix
+    m.setFromTriplets(triplets.begin(), triplets.end());
+
+    // Build vector
+    Vector b0(numNodes);
+    b0.setZero();
+
+    const int numBorderElements = mesh.numBorderElements;
+    std::vector<float> localLoadVector;
+    for (int i = 0; i < numBorderElements; i++)
+    {
+        int triangleId, side, group;
+        mesh.getBorderElement(i, triangleId, side, group, 0, 0);
+        
+        if (group != idLeft && group != idCircle)
+        {
+            continue;
+        }
+        mesh.getElement(triangleId, ids.data(), pts.data());
+
+        const auto & t = mesh.elementTransforms[triangleId];
+        integrator.integrateLocalBorderLoadVector(t, group == idCircle ? circleFlow : flow, side, localLoadVector);
+
+        // Accumulate
+        assert(localLoadVector.size() == elSize);
+        for (int k = 0; k < elSize; k++)
+        {
+            const int j = ids[k];
+            b0[j] += localLoadVector[k];
+        }
+    }
+
+    // Handle dirichlet nodes
+    Vector d(numNodes);
+    d.setZero();
+    for (const auto [id, val] : dirichletNodes)
+    {
+        d[id] = val;
+    }
+
+    // Compose system for internal nodes
+    const int numInternal = internalNodes.size();
+    Vector sub = m * d;
+    Vector bInternal(numInternal);
+    const auto internalTriplets = projectTriplets(numNodes, triplets, internalNodes);
+    SpMat mInternal(numInternal, numInternal);
+    mInternal.setFromTriplets(internalTriplets.begin(), internalTriplets.end());
+    for (int i = 0; i < numInternal; i++)
+    {
+        const int j = internalNodes[i];
+        bInternal[i] = b0[j] - sub[j];
+    }
+
+    // Solve for internal nodes
+    Eigen::SimplicialLDLT<SpMat> solver(mInternal);
+    Eigen::Vector<SolType, Eigen::Dynamic> qInt = solver.solve(bInternal);
+
+    std::vector<float> result(numNodes);
+    for (int i = 0; i < numInternal; i++)
+    {
+        const int j = internalNodes[i];
+        result[j] = qInt[i];
+    }
+    for (const auto [j, value] : dirichletNodes)
+    {
+        result[j] = value;
+    }
+
+    return result;
+}
+
+
 int main(int argc, char ** argv)
 {
     const std::string usageMsg = "./HeatEquation <msh file>";
@@ -286,15 +587,26 @@ int main(int argc, char ** argv)
 
     auto triMesh = mesh::parseTriangleGmsh(meshFileName);
 
-    const auto elementType = el::Type::P1;
+    const auto elementType = el::Type::P2;
     const auto baseElement = el::createElement(elementType);
 
     auto mesh = mesh::createMesh(triMesh, baseElement);
 
-    std::vector<float> nodeValues = solveHeatEquation(mesh);
+    // std::vector<float> nodeValues = solveHeatEquation(mesh);
+    // std::vector<float> nodeValues = solveHeatEquation2(mesh);
+    std::vector<float> nodeValues = solveHeatEquation3(mesh);
+
+    float minVal = std::numeric_limits<float>::infinity();
+    float maxVal = -std::numeric_limits<float>::infinity();
+    for (const auto v : nodeValues)
+    {
+        minVal = std::min(minVal, v);
+        maxVal = std::max(maxVal, v);
+    }
+    std::cout << "Min = " << minVal << ", max = " << maxVal << "\n";
 
     mesh::Interpolator interp(mesh, 0.05);
-    mesh::SimpleColorScale scc(0, 10,
+    mesh::SimpleColorScale scc(minVal, maxVal,
                                {cv::Scalar(128, 0, 0), cv::Scalar(0, 0, 128), cv::Scalar(0, 255, 255)});
 
     interp.setValues(nodeValues);

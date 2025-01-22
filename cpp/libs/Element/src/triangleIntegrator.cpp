@@ -47,6 +47,39 @@ namespace el
         throw std::invalid_argument(std::format("{}: No formula for degree [{}]", __FUNCTION__, degree));
     }
 
+    std::vector<IntegrationPoint> getLineIntegrationPoints(const int degree)
+    {
+        // Gauss quadrature, scaled and shifted to operate on [0, 1] instead of [-1, 1]
+        if (degree == 2)
+        {
+            return {IntegrationPoint{0.5, 0, 0.211324865405187},
+                    IntegrationPoint{0.5, 0, 0.788675134594813}};
+        }
+        else if (degree == 3)
+        {
+            return {IntegrationPoint{0.277777777777778, 0, 0.112701665379258},
+                    IntegrationPoint{0.444444444444444, 0, 0.5},
+                    IntegrationPoint{0.277777777777778, 0, 0.887298334620742}};
+        }
+        else if (degree == 4)
+        {
+            return {IntegrationPoint{0.173927422568727, 0, 0.0694318442029737},
+                    IntegrationPoint{0.326072577431273, 0, 0.330009478207572},
+                    IntegrationPoint{0.326072577431273, 0, 0.669990521792428},
+                    IntegrationPoint{0.173927422568727, 0, 0.930568155797026}};
+        }
+        else if (degree == 5)
+        {
+            return {IntegrationPoint{0.118463442528095, 0, 0.046910077030668},
+                    IntegrationPoint{0.239314335249683, 0, 0.230765344947158},
+                    IntegrationPoint{0.284444444444444, 0, 0.5},
+                    IntegrationPoint{0.239314335249683, 0, 0.769234655052842},
+                    IntegrationPoint{0.118463442528095, 0, 0.953089922969332}};
+        }
+
+        throw std::invalid_argument(std::format("{}: No formula for degree [{}]", __FUNCTION__, degree));
+    }
+
     Mat22 calcJacobian(const AffineTransform & t)
     {
         Mat22 j;
@@ -85,6 +118,7 @@ namespace el
         valueFn = getValueFunction(element.type);
 
         intPts = getIntegrationPoints(degree);
+        lineIntPts = getLineIntegrationPoints(degree);
 
         phi.resize(nDof);
         grad.create(2, nDof, CV_32FC1);
@@ -146,7 +180,7 @@ namespace el
             const float totalW = w * absDetJ;
             const cv::Mat contrib = grad.t() * btb * grad * totalW;
             // std::cout << contrib << "\n";
-            dst += contrib; 
+            dst += contrib;
         }
     }
 } // namespace el

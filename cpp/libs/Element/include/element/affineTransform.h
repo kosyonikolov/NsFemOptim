@@ -28,6 +28,19 @@ namespace el
             return apply(src);
         }
 
+        void applyNoOffset(const Point & src, Point & dst) const
+        {
+            dst.x = m[0][0] * src.x + m[0][1] * src.y;
+            dst.y = m[1][0] * src.x + m[1][1] * src.y;
+        }
+
+        Point applyNoOffset(const Point & src) const
+        {
+            Point result;
+            applyNoOffset(src, result);
+            return result;
+        }
+
         static AffineTransform identity();
     };
 
