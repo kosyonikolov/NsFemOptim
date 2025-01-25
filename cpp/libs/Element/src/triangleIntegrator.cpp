@@ -122,6 +122,7 @@ namespace el
 
         phi.resize(nDof);
         grad.create(2, nDof, CV_32FC1);
+        gradFlowDot.resize(nDof);
     }
 
     void TriangleIntegrator::integrateLocalMassMatrix(const AffineTransform & t, cv::Mat & dst) const

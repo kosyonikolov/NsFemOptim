@@ -573,6 +573,158 @@ std::vector<float> solveHeatEquation3(const mesh::ConcreteMesh & mesh)
     return result;
 }
 
+// Dirichlet BCs and convection
+std::vector<float> solveHeatEquation4(const mesh::ConcreteMesh & mesh)
+{
+    const int idLeft = mesh.findGroupId("Left");
+    if (idLeft < 0)
+    {
+        throw std::invalid_argument("No left border!");
+    }
+
+    const int idRight = mesh.findGroupId("Right");
+    if (idRight < 0)
+    {
+        throw std::invalid_argument("No right border!");
+    }
+
+    const int idCircle = mesh.findGroupId("Circle");
+    if (idCircle < 0)
+    {
+        throw std::invalid_argument("No circle border!");
+    }
+
+    const float leftVal = 0;
+    const float rightVal = 1;
+    const float circleVal = 10;
+
+    // auto flow = [](const el::Point & pt) -> el::Point
+    // {
+    //     const float minX = 0.4;
+    //     const float maxX = 0.7;
+    //     const float k = std::clamp<float>((pt.x - minX) / (maxX - minX), 0, 1);
+    //     el::Point flow;
+    //     flow.x = -10.6 * k;
+    //     flow.y = 0;
+    //     return flow;
+    // };
+
+    // auto flow = [](const el::Point & pt) -> el::Point
+    // {
+    //     const float d = pt.y - 0.2;
+    //     const float minD = 0.07;
+    //     const float maxD = 0.1;
+    //     const float k = std::clamp<float>((std::abs(d) - minD) / (maxD - minD), 0, 1);
+    //     el::Point flow;
+    //     flow.x = 0.8 * k;
+    //     flow.y = 0;
+    //     return flow;
+    // };
+
+    auto flow = [](const el::Point &) -> el::Point
+    {
+        el::Point flow;
+        flow.x = 0;
+        flow.y = 0.5;
+        return flow;
+    };
+
+    const int numNodes = mesh.nodes.size();
+    const std::vector<int> borderIds{idLeft, idRight, idCircle};
+    const std::vector<float> borderValues{leftVal, rightVal, circleVal};
+    const auto dirichletNodes = extractDirichletNodesSimple(mesh, borderIds, borderValues);
+    const auto internalNodes = extractInternalNodes(numNodes, dirichletNodes);
+
+    el::TriangleIntegrator integrator(mesh.baseElement, 4);
+    const int nElem = mesh.numElements;
+    const int elSize = mesh.getElementSize();
+
+    SpMat m(numNodes, numNodes);
+
+    // Assemble
+    std::vector<Triplet> triplets;
+
+    std::vector<int> ids(elSize);
+    std::vector<el::Point> pts(elSize);
+    cv::Mat localStiffnessMatrix;
+    cv::Mat localConvectionMatrix;
+    for (int i = 0; i < nElem; i++)
+    {
+        mesh.getElement(i, ids.data(), pts.data());
+        const auto t = mesh.elementTransforms[i];
+
+        // std::cout << std::format("Element {}:\nPoints:\n", i);
+        // for (const auto & pt : pts)
+        // {
+        //     std::cout << pt.x << " " << pt.y << "\n";
+        // }
+
+        integrator.integrateLocalStiffnessMatrix(t, localStiffnessMatrix);
+        assert(elSize == localStiffnessMatrix.cols);
+        assert(elSize == localStiffnessMatrix.rows);
+        
+        integrator.integrateLocalConvectionMatrix(t, flow, localConvectionMatrix);
+        assert(elSize == localConvectionMatrix.cols);
+        assert(elSize == localConvectionMatrix.rows);
+
+        // std::cout << "Local matrix:\n";
+        // std::cout << localStiffnessMatrix << "\n";
+
+        // Accumulate
+        for (int r = 0; r < elSize; r++)
+        {
+            const int i = ids[r];
+            for (int c = 0; c < elSize; c++)
+            {
+                const int j = ids[c];
+                const SolType val = localStiffnessMatrix.at<float>(r, c) + localConvectionMatrix.at<float>(r, c);
+                const Triplet triplet(i, j, val);
+                triplets.push_back(triplet);
+            }
+        }
+    }
+
+    // Build matrix
+    m.setFromTriplets(triplets.begin(), triplets.end());
+
+    // Handle dirichlet nodes
+    Vector b0(numNodes);
+    b0.setZero();
+    for (const auto [id, val] : dirichletNodes)
+    {
+        b0[id] = val;
+    }
+
+    // Compose system for internal nodes
+    const int numInternal = internalNodes.size();
+    Vector sub = m * b0;
+    Vector bInternal(numInternal);
+    const auto internalTriplets = projectTriplets(numNodes, triplets, internalNodes);
+    SpMat mInternal(numInternal, numInternal);
+    mInternal.setFromTriplets(internalTriplets.begin(), internalTriplets.end());
+    for (int i = 0; i < numInternal; i++)
+    {
+        const int j = internalNodes[i];
+        bInternal[i] = -sub[j];
+    }
+
+    // Solve for internal nodes
+    Eigen::SimplicialLDLT<SpMat> solver(mInternal);
+    Eigen::Vector<SolType, Eigen::Dynamic> qInt = solver.solve(bInternal);
+
+    std::vector<float> result(numNodes);
+    for (int i = 0; i < numInternal; i++)
+    {
+        const int j = internalNodes[i];
+        result[j] = qInt[i];
+    }
+    for (const auto [j, value] : dirichletNodes)
+    {
+        result[j] = value;
+    }
+
+    return result;
+}
 
 int main(int argc, char ** argv)
 {
@@ -592,9 +744,9 @@ int main(int argc, char ** argv)
 
     auto mesh = mesh::createMesh(triMesh, baseElement);
 
-    // std::vector<float> nodeValues = solveHeatEquation(mesh);
+    std::vector<float> nodeValues = solveHeatEquation4(mesh);
     // std::vector<float> nodeValues = solveHeatEquation2(mesh);
-    std::vector<float> nodeValues = solveHeatEquation3(mesh);
+    // std::vector<float> nodeValues = solveHeatEquation3(mesh);
 
     float minVal = std::numeric_limits<float>::infinity();
     float maxVal = -std::numeric_limits<float>::infinity();

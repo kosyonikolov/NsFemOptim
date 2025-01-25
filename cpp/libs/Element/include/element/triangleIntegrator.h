@@ -17,6 +17,8 @@ namespace el
 
     float det(const Mat22 & m);
 
+    cv::Mat calcB(const AffineTransform & t);
+
     struct IntegrationPoint
     {
         float x;
@@ -41,7 +43,8 @@ namespace el
 
         // Alloc-once buffers
         mutable std::vector<float> phi;
-        mutable cv::Mat grad; // shape = (2, DOF), first row = gradX, second row = gradY
+        mutable cv::Mat grad;                   // shape = (2, DOF), first row = gradX, second row = gradY
+        mutable std::vector<float> gradFlowDot; // DOF
 
     public:
         TriangleIntegrator(const Element & element, const int degree);
@@ -106,6 +109,44 @@ namespace el
                 for (int i = 0; i < nDof; i++)
                 {
                     dst[i] += phi[i] * totalW;
+                }
+            }
+        }
+
+        // Local convection matrix for generic flow function
+        template <typename F>
+        void integrateLocalConvectionMatrix(const AffineTransform & tFwd, F flowFunc, cv::Mat & dst)
+        {
+            dst.create(nDof, nDof, CV_32FC1);
+            dst.setTo(0);
+
+            const auto j = calcJacobian(tFwd);
+            const float jSign = det(j) < 0 ? -1 : 1;
+            const auto b = calcB(tFwd);
+
+            float * gradX = grad.ptr<float>(0);
+            float * gradY = grad.ptr<float>(1);
+            for (const auto [x, y, w] : intPts)
+            {
+                shapeFn(x, y, phi.data());
+                shapeGradFn(x, y, gradX, gradY);
+                const auto globalPt = tFwd(Point{x, y});
+                const Point globalFlow = flowFunc(globalPt);
+                const Point localFlow{b.at<float>(0, 0) * globalFlow.x + b.at<float>(1, 0) * globalFlow.y,
+                                      b.at<float>(0, 1) * globalFlow.x + b.at<float>(1, 1) * globalFlow.y};
+
+                for (int i = 0; i < nDof; i++)
+                {
+                    gradFlowDot[i] = localFlow.x * grad.at<float>(0, i) + localFlow.y * grad.at<float>(1, i);
+                }
+                const float totalW = w * jSign;
+                for (int r = 0; r < nDof; r++)
+                {
+                    float * dstRow = dst.ptr<float>(r);
+                    for (int c = 0; c < nDof; c++)
+                    {
+                        dstRow[c] += gradFlowDot[c] * phi[r] * totalW;
+                    }
                 }
             }
         }
