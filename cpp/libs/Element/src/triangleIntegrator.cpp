@@ -163,7 +163,7 @@ namespace el
         dst.setTo(0);
 
         const auto j = calcJacobian(t);
-        const float absDetJ = std::abs(det(j));
+        const float invAbsDetJ = 1.0f / std::abs(det(j));
 
         const auto b = calcB(t);
         const auto btb = b.t() * b;
@@ -177,7 +177,7 @@ namespace el
         for (const auto [x, y, w] : intPts)
         {
             shapeGradFn(x, y, gradX, gradY);
-            const float totalW = w * absDetJ;
+            const float totalW = w * invAbsDetJ;
             const cv::Mat contrib = grad.t() * btb * grad * totalW;
             // std::cout << contrib << "\n";
             dst += contrib;

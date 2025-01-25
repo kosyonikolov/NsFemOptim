@@ -308,7 +308,7 @@ std::vector<float> solveHeatEquation2(const mesh::ConcreteMesh & mesh)
         const float s = (pt.y - 0.2);
         el::Point r;
         // r.x = -0.001 * (0.3f - 4.5f * s*s);
-        r.x = -0.001 * std::exp(-100 * s * s);
+        r.x = -1000 * std::exp(-100 * s * s);
         r.y = 0;
         return r;
     };
@@ -368,7 +368,6 @@ std::vector<float> solveHeatEquation2(const mesh::ConcreteMesh & mesh)
 
         const auto & t = mesh.elementTransforms[triangleId];
         integrator.integrateLocalBorderLoadVector(t, flow, side, localLoadVector);
-        
         
         // Accumulate
         assert(localLoadVector.size() == elSize);
@@ -447,12 +446,13 @@ std::vector<float> solveHeatEquation3(const mesh::ConcreteMesh & mesh)
     const auto dirichletNodes = extractDirichletNodesSimple(mesh, borderIds, borderValues);
     const auto internalNodes = extractInternalNodes(numNodes, dirichletNodes);
 
-    auto flow = [](const el::Point & pt) -> el::Point
+    auto flow = [](const el::Point & /*pt*/) -> el::Point
     {
-        const float s = (pt.y - 0.2);
+        // const float s = (pt.y - 0.2);
         el::Point r;
         // r.x = -0.001 * (0.3f - 4.5f * s*s);
-        r.x = -0.001 * std::exp(-100 * s * s);
+        // r.x = -17 * std::exp(-90 * s * s);
+        r.x = -8;
         r.y = 0;
         return r;
     };
@@ -463,7 +463,7 @@ std::vector<float> solveHeatEquation3(const mesh::ConcreteMesh & mesh)
         const float dx = pt.x - center.x;
         const float dy = pt.y - center.y;
         const el::Point normal = el::normalize(el::Point{dx, dy});
-        const float k = 0.0003;
+        const float k = 12;
         return {k * normal.x, k * normal.y};
     };
 
@@ -587,7 +587,7 @@ int main(int argc, char ** argv)
 
     auto triMesh = mesh::parseTriangleGmsh(meshFileName);
 
-    const auto elementType = el::Type::P2;
+    const auto elementType = el::Type::P1;
     const auto baseElement = el::createElement(elementType);
 
     auto mesh = mesh::createMesh(triMesh, baseElement);
