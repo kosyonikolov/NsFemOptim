@@ -214,13 +214,14 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
     // Pressure
     const std::vector<int> pressureBorderIds = {idRight};
-    const auto dirichletPressure = extractDirichletNodes(pressureMesh, velocityBorderIds, calcDirichletPressure);
+    const auto dirichletPressure = extractDirichletNodes(pressureMesh, pressureBorderIds, calcDirichletPressure);
     const auto internalPressureNodes = extractInternalNodes(numPressureNodes, dirichletPressure);
+    const int numInternalPressureNodes = internalPressureNodes.size();
     // =========================================================================================================
 
     // =========================================== Assemble matrices ===========================================
     std::vector<Triplet> velocityMassT, velocityStiffnessT;
-    std::vector<Triplet> pressureStiffnessT;
+    std::vector<Triplet> pressureStiffnessT, pressureStiffnessInternalT;
 
     // X on top, Y on bottom
     std::vector<Triplet> velocityPressureDivT;
@@ -231,7 +232,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     SpMat velocityMass(numVelocityNodes, numVelocityNodes);
     SpMat velocityStiffness(numVelocityNodes, numVelocityNodes);
     SpMat convection(numVelocityNodes, numVelocityNodes);
-    SpMat pressureStiffness(numPressureNodes, numPressureNodes);
+    SpMat pressureInternalStiffness(numInternalPressureNodes, numInternalPressureNodes);
     SpMat velocityPressureDiv(numPressureNodes, 2 * numVelocityNodes);
     SpMat pressureVelocityDiv(2 * numVelocityNodes, numPressureNodes);
 
@@ -336,7 +337,8 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     build(velocityMass, velocityMassT);
     build(velocityStiffness, velocityStiffnessT);
 
-    build(pressureStiffness, pressureStiffnessT);
+    pressureStiffnessInternalT = projectTriplets(numPressureNodes, pressureStiffnessT, internalPressureNodes);
+    build(pressureInternalStiffness, pressureStiffnessInternalT);
 
     build(velocityPressureDiv, velocityPressureDivT);
     build(pressureVelocityDiv, pressureVelocityDivT);
@@ -408,7 +410,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     result.steps.resize(numTimeSteps + 1);
 
     Eigen::SimplicialLDLT<SpMat> velocityMassSolver(velocityMass);
-    Eigen::SimplicialLDLT<SpMat> pressureStiffnessSolver(pressureStiffness);
+    Eigen::SimplicialLDLT<SpMat> pressureStiffnessSolver(pressureInternalStiffness);
 
     mesh::Interpolator velocityInterp(velocityMesh, 0.05);
     mesh::Interpolator pressureInterp(pressureMesh, 0.05);
@@ -514,7 +516,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         tentativeVelDiv *= invTau;
         assert(tentativeVelDiv.rows() == numPressureNodes);
         assert(tentativeVelDiv.cols() == 1);
-        if (true)
+        if (false)
         {
             std::vector<float> dbg(numPressureNodes);
             for (int i = 0; i < numPressureNodes; i++)
@@ -524,9 +526,24 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             drawPressure(std::format("pressure_div_{}", iT), dbg, "DIVERGENCE");
         }
 
-        Vector pressure = pressureStiffnessSolver.solve(tentativeVelDiv);
-        assert(pressure.rows() == numPressureNodes);
-        assert(pressure.cols() == 1);
+        Vector pressureRhs(numInternalPressureNodes);
+        for (int i = 0; i < numInternalPressureNodes; i++)
+        {
+            const int j = internalPressureNodes[i];
+            pressureRhs[i] = tentativeVelDiv[j];
+        }
+
+        Vector pressureInt = pressureStiffnessSolver.solve(pressureRhs);
+        assert(pressureInt.rows() == numInternalPressureNodes);
+        assert(pressureInt.cols() == 1);
+
+        Vector pressure(numPressureNodes);
+        pressure.setZero();
+        for (int i = 0; i < numInternalPressureNodes; i++)
+        {
+            const int j = internalPressureNodes[i];
+            pressure[j] = pressureInt[i];
+        }
         if (true)
         {
             std::vector<float> dbg(numPressureNodes);
@@ -559,13 +576,13 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         Eigen::Matrix<SolType, Eigen::Dynamic, 2> accelFinal = velocityMassSolver.solve(nablaP);
         for (int i = 0; i < numVelocityNodes; i++)
         {
-            velocityX[i] = tentativeVelocityXy(i) - tau * accelFinal(i, 0);
-            velocityY[i] = tentativeVelocityXy(i + numVelocityNodes) - tau * accelFinal(i, 1);
+            velocityX[i] = tentativeVelocityXy(i) + tau * accelFinal(i, 0);
+            velocityY[i] = tentativeVelocityXy(i + numVelocityNodes) + tau * accelFinal(i, 1);
         }
         imposeDirichletVelocity();
         result.steps[iT].velocity = velocityXy;
 
-        // Debug draw velocity
+        if (true)
         {
             std::vector<float> dbgVelocityX(numVelocityNodes), dbgVelocityY(numVelocityNodes);
             for (int i = 0; i < numVelocityNodes; i++)
@@ -598,14 +615,14 @@ int main(int argc, char ** argv)
     auto velocityMesh = mesh::createMesh(triMesh, velocityElement);
     auto pressureMesh = mesh::createMesh(triMesh, pressureElement);
 
-    if (false)
+    if (true)
     {
         const float scale = 3500;
         cv::imwrite("velocity_mesh.png", mesh::drawMesh(velocityMesh, scale));
         cv::imwrite("pressure_mesh.png", mesh::drawMesh(pressureMesh, scale));
     }
 
-    auto sol = solveNsChorinEigen(velocityMesh, pressureMesh, 1e-3, 2);
+    auto sol = solveNsChorinEigen(velocityMesh, pressureMesh, 1e-4, 2);
 
     return 0;
 }

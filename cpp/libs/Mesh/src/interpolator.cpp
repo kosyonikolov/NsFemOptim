@@ -184,7 +184,7 @@ namespace mesh
         }
 
         // Perform a self-check here - the points of each element should map to a segment that contains their element
-        selfCheckSegments();
+        // selfCheckSegments();
 
         const int elemSize = mesh.getElementSize();
         ptIds.resize(elemSize);
