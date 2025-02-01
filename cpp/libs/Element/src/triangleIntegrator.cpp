@@ -184,4 +184,45 @@ namespace el
             dst += contrib;
         }
     }
+
+    void TriangleIntegrator::integrateLocalSelfConvectionMatrix(const AffineTransform & tFwd, const float * flowX, const float * flowY, cv::Mat & dst)
+    {
+        dst.create(nDof, nDof, CV_32FC1);
+        dst.setTo(0);
+
+        const auto j = calcJacobian(tFwd);
+        const float jSign = det(j) < 0 ? -1 : 1;
+        const auto b = calcB(tFwd);
+
+        float * gradX = grad.ptr<float>(0);
+        float * gradY = grad.ptr<float>(1);
+        for (const auto [x, y, w] : intPts)
+        {
+            shapeFn(x, y, phi.data());
+            shapeGradFn(x, y, gradX, gradY);
+            // Compute global flow
+            Point globalFlow{0,0};
+            for (int i = 0; i < nDof; i++)
+            {
+                globalFlow.x += phi[i] * flowX[i];
+                globalFlow.y += phi[i] * flowY[i];
+            }
+            const Point localFlow{b.at<float>(0, 0) * globalFlow.x + b.at<float>(1, 0) * globalFlow.y,
+                                  b.at<float>(0, 1) * globalFlow.x + b.at<float>(1, 1) * globalFlow.y};
+
+            for (int i = 0; i < nDof; i++)
+            {
+                gradFlowDot[i] = localFlow.x * grad.at<float>(0, i) + localFlow.y * grad.at<float>(1, i);
+            }
+            const float totalW = w * jSign;
+            for (int r = 0; r < nDof; r++)
+            {
+                float * dstRow = dst.ptr<float>(r);
+                for (int c = 0; c < nDof; c++)
+                {
+                    dstRow[c] += gradFlowDot[c] * phi[r] * totalW;
+                }
+            }
+        }
+    }
 } // namespace el

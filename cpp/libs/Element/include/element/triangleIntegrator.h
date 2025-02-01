@@ -150,6 +150,10 @@ namespace el
                 }
             }
         }
+
+        // Local convection matrix for flow that is defined on the same element
+        // flowX and flowY must be DOF-sized vectors with the flow velocities
+        void integrateLocalSelfConvectionMatrix(const AffineTransform & tFwd, const float * flowX, const float * flowY, cv::Mat & dst);
     };
 }; // namespace el
 
