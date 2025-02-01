@@ -411,6 +411,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     Eigen::SimplicialLDLT<SpMat> pressureStiffnessSolver(pressureStiffness);
 
     mesh::Interpolator velocityInterp(velocityMesh, 0.05);
+    mesh::Interpolator pressureInterp(pressureMesh, 0.05);
     std::vector<cv::Scalar> colorScale{cv::Scalar(128, 0, 0), cv::Scalar(0, 0, 128), cv::Scalar(0, 255, 255)};
     const float imgScale = 1500;
 
@@ -432,6 +433,20 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
         cv::imwrite(prefix + "_x.png", dbgImgX);
         cv::imwrite(prefix + "_y.png", dbgImgY);
+    };
+
+    auto drawPressure = [&](const std::string & prefix, const std::vector<float> & p, const std::string & tag)
+    {
+        const float eps = 1e-2;
+        auto [minP, maxP] = std::minmax_element(p.begin(), p.end());
+        std::cout << std::format("{}: [{}, {}]\n", tag, *minP, *maxP);
+
+        mesh::SimpleColorScale scc(*minP, *maxP + eps, colorScale);
+
+        pressureInterp.setValues(p);
+        auto dbgImgP = mesh::drawValues(pressureInterp, scc, imgScale);
+
+        cv::imwrite(prefix + ".png", dbgImgP);
     };
 
     if (false)
@@ -494,9 +509,33 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
         // 2) Find the pressure: nabla(p) = nabla . u_* / tau
         // Calculate the divergence of the tentative velocity
-        auto tentativeVelDiv = velocityPressureDiv * tentativeVelocityXy;
+        Vector tentativeVelDiv = velocityPressureDiv * tentativeVelocityXy;
         const float invTau = 1.0f / tau;
-        Vector pressure = pressureStiffnessSolver.solve(tentativeVelDiv * invTau);
+        tentativeVelDiv *= invTau;
+        assert(tentativeVelDiv.rows() == numPressureNodes);
+        assert(tentativeVelDiv.cols() == 1);
+        if (true)
+        {
+            std::vector<float> dbg(numPressureNodes);
+            for (int i = 0; i < numPressureNodes; i++)
+            {
+                dbg[i] = tentativeVelDiv(i);
+            }
+            drawPressure(std::format("pressure_div_{}", iT), dbg, "DIVERGENCE");
+        }
+
+        Vector pressure = pressureStiffnessSolver.solve(tentativeVelDiv);
+        assert(pressure.rows() == numPressureNodes);
+        assert(pressure.cols() == 1);
+        if (true)
+        {
+            std::vector<float> dbg(numPressureNodes);
+            for (int i = 0; i < numPressureNodes; i++)
+            {
+                dbg[i] = pressure(i);
+            }
+            drawPressure(std::format("pressure_{}", iT), dbg, "PRESSURE");
+        }
 
         // Copy pressure to output
         auto & outP = result.steps[iT].pressure;
