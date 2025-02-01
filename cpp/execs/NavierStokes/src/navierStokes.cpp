@@ -87,7 +87,6 @@ std::vector<DirichletNode> extractDirichletNodes(const mesh::ConcreteMesh & mesh
         {
             continue;
         }
-        const int borderId = it - borderIds.begin();
         for (int k = 0; k < elSize; k++)
         {
             const int nodeIdx = ptIds[k];
@@ -95,7 +94,7 @@ std::vector<DirichletNode> extractDirichletNodes(const mesh::ConcreteMesh & mesh
             {
                 continue;
             }
-            const float val = borderValueFn(mesh, nodeIdx, borderId);
+            const float val = borderValueFn(mesh, nodeIdx, group);
             seen[nodeIdx] = true;
             result.push_back(DirichletNode{ptIds[k], val});
         }
@@ -411,6 +410,41 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     Eigen::SimplicialLDLT<SpMat> velocityMassSolver(velocityMass);
     Eigen::SimplicialLDLT<SpMat> pressureStiffnessSolver(pressureStiffness);
 
+    mesh::Interpolator velocityInterp(velocityMesh, 0.05);
+    std::vector<cv::Scalar> colorScale{cv::Scalar(128, 0, 0), cv::Scalar(0, 0, 128), cv::Scalar(0, 255, 255)};
+    const float imgScale = 1500;
+
+    auto drawVelocity = [&](const std::string & prefix, const std::vector<float> & vx, const std::vector<float> & vy, const std::string & tag)
+    {
+        const float eps = 1e-2;
+        auto [minX, maxX] = std::minmax_element(vx.begin(), vx.end());
+        auto [minY, maxY] = std::minmax_element(vy.begin(), vy.end());
+
+        std::cout << std::format("{}: x = [{}, {}], y = [{}, {}]\n", tag, *minX, *maxX, *minY, *maxY);
+
+        mesh::SimpleColorScale sccX(*minX, *maxX + eps, colorScale);
+        mesh::SimpleColorScale sccY(*minY, *maxY + eps, colorScale);
+
+        velocityInterp.setValues(vx);
+        auto dbgImgX = mesh::drawValues(velocityInterp, sccX, imgScale);
+        velocityInterp.setValues(vy);
+        auto dbgImgY = mesh::drawValues(velocityInterp, sccY, imgScale);
+
+        cv::imwrite(prefix + "_x.png", dbgImgX);
+        cv::imwrite(prefix + "_y.png", dbgImgY);
+    };
+
+    if (false)
+    {
+        std::vector<float> dbgVelocityX(numVelocityNodes), dbgVelocityY(numVelocityNodes);
+        for (int i = 0; i < numVelocityNodes; i++)
+        {
+            dbgVelocityX[i] = velocityXy[i];
+            dbgVelocityY[i] = velocityXy[i + numVelocityNodes];
+        }
+        drawVelocity("velocity_initial", dbgVelocityX, dbgVelocityY, "INITIAL");
+    }
+
     for (int iT = 0; iT <= numTimeSteps; iT++)
     {
         // 1) Find the tentative velocity
@@ -418,7 +452,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         // Solve for the "acceleration" a: (a, v) = (u_i . nabla(u_i), v) + viscosity * (nabla(u_i), nabla(v))
         // Then calculate u_t = u_i - tau * a
         // The system for a is [M 0; 0 M] [a_x; a_y] = [A 0; 0 A] [q_x; q_y], where A = viscosity * M1 + C
-        // Since the system is effectively the same for a_x and a_y, we can solve M [a_x a_y] = A [q_x q_y] 
+        // Since the system is effectively the same for a_x and a_y, we can solve M [a_x a_y] = A [q_x q_y]
         assembleConvection();
         auto A = viscosity * velocityStiffness + convection;
         Eigen::Matrix<SolType, Eigen::Dynamic, 2> velocityMatrix(numVelocityNodes, 2);
@@ -436,7 +470,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         // Update the velocity
         for (int i = 0; i < 2 * numVelocityNodes; i++)
         {
-            tentativeVelocityXy(i) = velocityXy[i]; 
+            tentativeVelocityXy(i) = velocityXy[i];
         }
         // Process only the internal nodes - the velocity at the start already has the correct BC's
         for (const int i : internalVelocityNodes)
@@ -445,6 +479,17 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             tentativeVelocityXy(i)                    -= tau * accel(i, 0);
             tentativeVelocityXy(i + numVelocityNodes) -= tau * accel(i, 1);
             // clang-format on
+        }
+
+        if (false)
+        {
+            std::vector<float> dbgVelocityX(numVelocityNodes), dbgVelocityY(numVelocityNodes);
+            for (int i = 0; i < numVelocityNodes; i++)
+            {
+                dbgVelocityX[i] = tentativeVelocityXy(i);
+                dbgVelocityY[i] = tentativeVelocityXy(i + numVelocityNodes);
+            }
+            drawVelocity(std::format("velocity_{}_tentative", iT), dbgVelocityX, dbgVelocityY, "TENTATIVE");
         }
 
         // 2) Find the pressure: nabla(p) = nabla . u_* / tau
@@ -475,11 +520,22 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         Eigen::Matrix<SolType, Eigen::Dynamic, 2> accelFinal = velocityMassSolver.solve(nablaP);
         for (int i = 0; i < numVelocityNodes; i++)
         {
-            velocityX[i] = tentativeVelocityXy(i)                    - tau * accelFinal(i, 0);
+            velocityX[i] = tentativeVelocityXy(i) - tau * accelFinal(i, 0);
             velocityY[i] = tentativeVelocityXy(i + numVelocityNodes) - tau * accelFinal(i, 1);
         }
         imposeDirichletVelocity();
         result.steps[iT].velocity = velocityXy;
+
+        // Debug draw velocity
+        {
+            std::vector<float> dbgVelocityX(numVelocityNodes), dbgVelocityY(numVelocityNodes);
+            for (int i = 0; i < numVelocityNodes; i++)
+            {
+                dbgVelocityX[i] = velocityXy[i];
+                dbgVelocityY[i] = velocityXy[i + numVelocityNodes];
+            }
+            drawVelocity(std::format("velocity_{}", iT), dbgVelocityX, dbgVelocityY, "FINAL");
+        }
     }
 
     return result;
@@ -510,7 +566,7 @@ int main(int argc, char ** argv)
         cv::imwrite("pressure_mesh.png", mesh::drawMesh(pressureMesh, scale));
     }
 
-    auto sol = solveNsChorinEigen(velocityMesh, pressureMesh, 1e-4, 2);
+    auto sol = solveNsChorinEigen(velocityMesh, pressureMesh, 1e-3, 2);
 
     return 0;
 }
