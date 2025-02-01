@@ -2,6 +2,7 @@
 #define LIBS_ELEMENT_INCLUDE_ELEMENT_TRIANGLEINTEGRATOR
 
 #include <vector>
+#include <optional>
 
 #include <opencv2/opencv.hpp>
 
@@ -28,12 +29,18 @@ namespace el
 
     class TriangleIntegrator
     {
+        // Main element
         Element element;
-
         int nDof;
         ShapeFn shapeFn;
         ShapeGradFn shapeGradFn;
         ValueFn valueFn;
+
+        // Secondary element
+        std::optional<Element> element2;
+        int nDof2 = 0;
+        ShapeFn shapeFn2 = 0;
+        ShapeGradFn shapeGradFn2 = 0;
 
         // 2D points on reference triangle
         std::vector<IntegrationPoint> intPts;
@@ -43,11 +50,11 @@ namespace el
 
         // Alloc-once buffers
         mutable std::vector<float> phi;
-        mutable cv::Mat grad;                   // shape = (2, DOF), first row = gradX, second row = gradY
+        mutable cv::Mat grad;                   // shape = (2, maxDOF), first row = gradX, second row = gradY
         mutable std::vector<float> gradFlowDot; // DOF
 
     public:
-        TriangleIntegrator(const Element & element, const int degree);
+        TriangleIntegrator(const Element & element, const int degree, const std::optional<Element> & secondaryElement = {});
 
         void integrateLocalMassMatrix(const AffineTransform & t, cv::Mat & dst) const;
 
@@ -154,6 +161,12 @@ namespace el
         // Local convection matrix for flow that is defined on the same element
         // flowX and flowY must be DOF-sized vectors with the flow velocities
         void integrateLocalSelfConvectionMatrix(const AffineTransform & tFwd, const float * flowX, const float * flowY, cv::Mat & dst);
+
+        // Local matrices of the form [(dM_j/dx, S_i)], [(dM_j/dy, S_i)]
+        // M = main element, S = secondary (swapped if swapElems == true)
+        // Output size: rows = dofS, cols = dofM
+        // Requires that the integrator is created with a secondary element
+        void integrateLocalDivergenceMatrix(const AffineTransform & t, const bool swapElems, cv::Mat & dstX, cv::Mat & dstY);
     };
 }; // namespace el
 

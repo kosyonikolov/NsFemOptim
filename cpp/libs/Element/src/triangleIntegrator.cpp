@@ -109,20 +109,30 @@ namespace el
         return m[0][0] * m[1][1] - m[0][1] * m[1][0];
     }
 
-    TriangleIntegrator::TriangleIntegrator(const Element & element, const int degree)
-        : element(element)
+    TriangleIntegrator::TriangleIntegrator(const Element & element, const int degree, const std::optional<Element> & secondaryElement)
+        : element(element), element2(secondaryElement)
     {
         nDof = dof(element.type);
         shapeFn = getShapeFunction(element.type);
         shapeGradFn = getShapeGradFunction(element.type);
         valueFn = getValueFunction(element.type);
 
+        int maxDof = nDof;
+        if (secondaryElement)
+        {
+            const auto & s = secondaryElement.value();
+            nDof2 = dof(s.type);
+            shapeFn2 = getShapeFunction(s.type);
+            shapeGradFn2 = getShapeGradFunction(s.type);
+            maxDof = std::max(maxDof, nDof2);
+        }
+
         intPts = getIntegrationPoints(degree);
         lineIntPts = getLineIntegrationPoints(degree);
 
-        phi.resize(nDof);
-        grad.create(2, nDof, CV_32FC1);
-        gradFlowDot.resize(nDof);
+        phi.resize(maxDof);
+        grad.create(2, maxDof, CV_32FC1);
+        gradFlowDot.resize(maxDof);
     }
 
     void TriangleIntegrator::integrateLocalMassMatrix(const AffineTransform & t, cv::Mat & dst) const
@@ -221,6 +231,72 @@ namespace el
                 for (int c = 0; c < nDof; c++)
                 {
                     dstRow[c] += gradFlowDot[c] * phi[r] * totalW;
+                }
+            }
+        }
+    }
+
+    void TriangleIntegrator::integrateLocalDivergenceMatrix(const AffineTransform & t, const bool swapElems, cv::Mat & dstX, cv::Mat & dstY)
+    {
+        if (!element2)
+        {
+            throw std::runtime_error(std::format("{}: No secondary element in integrator", __FUNCTION__));
+        }
+
+        int dofM, dofS;
+        ShapeFn shapeS;
+        ShapeGradFn gradM;
+        if (swapElems)
+        {
+            gradM = shapeGradFn2;
+            dofM = nDof2;
+            shapeS = shapeFn;
+            dofS = nDof;
+        }
+        else
+        {
+            gradM = shapeGradFn;
+            dofM = nDof;
+            shapeS = shapeFn2;
+            dofS = nDof2;
+        }
+        assert(shapeS);
+        assert(gradM);
+        assert(dofM > 0);
+        assert(dofS > 0);
+
+        const auto j = calcJacobian(t);
+        const float jSign = det(j) < 0 ? -1 : 1;
+        const auto b = calcB(t);
+
+        // [(dM_j/dx, S_i)], [(dM_j/dy, S_i)]
+        // rows = dofS, cols = dofM
+        dstX.create(dofS, dofM, CV_32FC1);
+        dstY.create(dofS, dofM, CV_32FC1);
+        dstX.setTo(0);
+        dstY.setTo(0);
+
+        cv::Mat localGrad(2, dofM, CV_32FC1);
+        float * gradX = localGrad.ptr<float>(0);
+        float * gradY = localGrad.ptr<float>(1);
+        cv::Mat globalGrad;
+        for (const auto [x, y, w] : intPts)
+        {
+            shapeS(x, y, phi.data());
+            gradM(x, y, gradX, gradY);
+            globalGrad = b * localGrad;
+            const float * globalGradX = globalGrad.ptr<float>(0);
+            const float * globalGradY = globalGrad.ptr<float>(1);
+
+            const float totalW = w * jSign;
+            for (int r = 0; r < dofS; r++)
+            {
+                float * dstRowX = dstX.ptr<float>(r);
+                float * dstRowY = dstY.ptr<float>(r);
+                for (int c = 0; c < dofM; c++)
+                {
+                    dstRowX[c] += globalGradX[c] * phi[r] * totalW;
+                    dstRowY[c] += globalGradY[c] * phi[r] * totalW;
                 }
             }
         }
