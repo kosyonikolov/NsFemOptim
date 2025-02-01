@@ -509,10 +509,10 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             drawVelocity(std::format("velocity_{}_tentative", iT), dbgVelocityX, dbgVelocityY, "TENTATIVE");
         }
 
-        // 2) Find the pressure: nabla(p) = nabla . u_* / tau
+        // 2) Find the pressure: delta(p) = nabla . u_* / tau
         // Calculate the divergence of the tentative velocity
         Vector tentativeVelDiv = velocityPressureDiv * tentativeVelocityXy;
-        const float invTau = 1.0f / tau;
+        const float invTau = -1.0f / tau;
         tentativeVelDiv *= invTau;
         assert(tentativeVelDiv.rows() == numPressureNodes);
         assert(tentativeVelDiv.cols() == 1);
@@ -576,8 +576,10 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         Eigen::Matrix<SolType, Eigen::Dynamic, 2> accelFinal = velocityMassSolver.solve(nablaP);
         for (int i = 0; i < numVelocityNodes; i++)
         {
-            velocityX[i] = tentativeVelocityXy(i) + tau * accelFinal(i, 0);
-            velocityY[i] = tentativeVelocityXy(i + numVelocityNodes) + tau * accelFinal(i, 1);
+            // clang-format off
+            velocityX[i] = tentativeVelocityXy(i)                    - tau * accelFinal(i, 0);
+            velocityY[i] = tentativeVelocityXy(i + numVelocityNodes) - tau * accelFinal(i, 1);
+            // clang-format on
         }
         imposeDirichletVelocity();
         result.steps[iT].velocity = velocityXy;
