@@ -6,26 +6,14 @@
 
 #include <element/calc.h>
 
-#include <mesh/concreteMesh.h>
+#include <mesh/triangleLookup.h>
 
 namespace mesh
 {
     class Interpolator
     {
-        // Global coordinates
-        float minX, minY;
-        float width, height;
-
-        // Segments
-        int cols;
-        int rows;
-        float segmWidth;
-        float segmHeight;
-
-        // Element that intersect a segment
-        std::vector<std::vector<int>> segmentElements;
-
-        ConcreteMesh mesh;
+        TriangleLookup lookup;
+        
         std::vector<float> values;
 
         el::ValueFn valueFn;
@@ -35,12 +23,6 @@ namespace mesh
         // Allocate-once buffers for interpolation
         mutable std::vector<int> ptIds;
         mutable std::vector<float> ptValues;
-
-        void selfCheckSegments();
-
-        int getSegmentId(const float x, const float y) const;
-
-        std::optional<float> interpOnElement(const float x, const float y, const int elemId) const;
 
     public:
         struct InterpolatorRange
