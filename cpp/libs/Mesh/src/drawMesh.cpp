@@ -112,7 +112,7 @@ namespace mesh
         const float invS = 1.0f / scale;
         for (int iy = 0; iy < height; iy++)
         {
-            const float y = iy * invS + iSize.minY;
+            const float y = (height - 1 - iy) * invS + iSize.minY;
             uint8_t * line = result.ptr<uint8_t>(iy);
             for (int ix = 0; ix < width; ix++)
             {
