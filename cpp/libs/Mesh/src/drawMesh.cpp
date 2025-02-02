@@ -137,19 +137,20 @@ namespace mesh
         return result;
     }
 
-    cv::Mat drawCfd(const TriangleLookup & triangleLookup, const std::vector<cv::Scalar> & pressureColors,
-                    const float imgScale, const float velocityScale, const float velocityStep,
+    cv::Mat drawCfd(const TriangleLookup & triangleLookup, const AbstractColorScale & pressureScale,
+                    const float imgScale0, const float velocityScale, const float velocityStep,
                     const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
                     const std::vector<float> & velocityXy, const std::vector<float> & pressure)
     {
-        const int width = triangleLookup.width * imgScale + 1;
-        const int height = triangleLookup.height * imgScale + 1;
+        const int width = 2 *  ((static_cast<int>(triangleLookup.width * imgScale0 + 0.5) + 1) / 2);
+        const int height = 2 * ((static_cast<int>(triangleLookup.height * imgScale0 + 0.5) + 1) / 2);
+        const float imgScale = width / triangleLookup.width;
         const float invS = 1.0f / imgScale;
 
         cv::Mat result = cv::Mat::zeros(height, width, CV_8UC3);
 
         const int numVelocityNodes = velocityMesh.nodes.size();
-        const int numPressureNodes = pressureMesh.nodes.size();
+        [[maybe_unused]] const int numPressureNodes = pressureMesh.nodes.size();
 
         assert(velocityXy.size() == 2 * numVelocityNodes);
         assert(pressure.size() == numPressureNodes);
@@ -165,12 +166,6 @@ namespace mesh
 
         std::vector<float> localVx(elSizeV), localVy(elSizeV);
         std::vector<float> localPressure(elSizeP);
-
-        // Find range of pressure
-        auto [minPIt, maxPIt] = std::minmax_element(pressure.begin(), pressure.end());
-        const float minPressure = *minPIt;
-        const float maxPressure = *maxPIt + 1e-3f;
-        SimpleColorScale pressureCc(minPressure, maxPressure, pressureColors);
 
         // Draw pressure
         auto pressureValue = el::getValueFunction(pressureMesh.baseElement.type);
@@ -198,7 +193,7 @@ namespace mesh
                 }
 
                 const float pVal = pressureValue(t->localX, t->localY, localPressure.data());
-                const auto color = pressureCc(pVal);
+                const auto color = pressureScale(pVal);
                
                 uint8_t * pix = line + 3 * ix;
                 pix[0] = color[0];

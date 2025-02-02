@@ -52,7 +52,7 @@ float calcDirichletVx(const mesh::ConcreteMesh & mesh, const int nodeId, const i
     {
         const auto & node = mesh.nodes[nodeId];
         const float y = node.y;
-        const float v = 1.2 * y * (0.41 - y) / (0.41 * 0.41);
+        const float v = 20 * y * (0.41 - y) / (0.41 * 0.41);
         return v;
     }
     return 0;
@@ -630,19 +630,37 @@ int main(int argc, char ** argv)
     }
 
     const float tau = 1e-4;
-    const float maxT = 0.01;
+    const float maxT = 1;
     auto sol = solveNsChorinEigen(velocityMesh, pressureMesh, tau, maxT);
 
+    // Find range of pressure
+    float minP = std::numeric_limits<float>::infinity();
+    float maxP = -std::numeric_limits<float>::infinity();
+    const int nSteps = sol.steps.size();
+    const int skipStart = 5;
+    // Don't consider the initial pressure levels - they will likely have a high pressure due to initial conditions
+    for (int i = std::min(skipStart, std::max(nSteps - skipStart, 0)); i < nSteps; i++)
+    {
+        const auto & p = sol.steps[i].pressure;
+        auto [minIt, maxIt] = std::minmax_element(p.begin(), p.end());
+        minP = std::min(minP, *minIt);
+        maxP = std::max(maxP, *maxIt);
+    }
+    maxP += 1e-3f;
+    std::vector<cv::Scalar> colors{cv::Scalar(128, 0, 0), cv::Scalar(0, 0, 128), cv::Scalar(0, 200, 200)};
+    mesh::SimpleColorScale pressureColorScale(minP, maxP, colors);
+
     mesh::TriangleLookup lookup(velocityMesh, 0.05);
-    std::vector<cv::Scalar> colorScale{cv::Scalar(128, 0, 0), cv::Scalar(0, 0, 128), cv::Scalar(0, 200, 200)};
     const float velocityStep = 0.025;
-    const float velocityScale = 0.05;
+    const float velocityScale = 0.05 / 20;
     for (int i = 0; i < sol.steps.size(); i++)
     {
         const auto & s = sol.steps[i];
-        const cv::Mat img = mesh::drawCfd(lookup, colorScale, 800, velocityScale, velocityStep, velocityMesh, pressureMesh,
+        const cv::Mat img = mesh::drawCfd(lookup, pressureColorScale, 800,
+                                          velocityScale, velocityStep,
+                                          velocityMesh, pressureMesh,
                                           s.velocity, s.pressure);
-        const std::string outFname = std::format("out_{}_time_{}.png", i, s.time);
+        const std::string outFname = std::format("out_{}.png", i);
         std::cout << outFname << "\n";
         cv::imwrite(outFname, img);
     }
