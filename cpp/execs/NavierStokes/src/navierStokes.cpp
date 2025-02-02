@@ -15,6 +15,7 @@
 #include <mesh/gmsh.h>
 #include <mesh/interpolator.h>
 #include <mesh/io.h>
+#include <mesh/triangleLookup.h>
 
 using SolType = double;
 using SpMat = Eigen::SparseMatrix<SolType>;
@@ -464,6 +465,10 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
     for (int iT = 0; iT <= numTimeSteps; iT++)
     {
+        const float currTime = iT * tau;
+        std::cout << std::format("{} / {}: time = {}\n", iT, numTimeSteps, currTime);
+        result.steps[iT].time = currTime;
+
         // 1) Find the tentative velocity
         // The original equation is u_t = u_i + tau(-u_i . nabla(u_i) + viscosity * delta(u_i))
         // Solve for the "acceleration" a: (a, v) = (u_i . nabla(u_i), v) + viscosity * (nabla(u_i), nabla(v))
@@ -544,7 +549,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             const int j = internalPressureNodes[i];
             pressure[j] = pressureInt[i];
         }
-        if (true)
+        if (false)
         {
             std::vector<float> dbg(numPressureNodes);
             for (int i = 0; i < numPressureNodes; i++)
@@ -584,7 +589,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         imposeDirichletVelocity();
         result.steps[iT].velocity = velocityXy;
 
-        if (true)
+        if (false)
         {
             std::vector<float> dbgVelocityX(numVelocityNodes), dbgVelocityY(numVelocityNodes);
             for (int i = 0; i < numVelocityNodes; i++)
@@ -624,7 +629,23 @@ int main(int argc, char ** argv)
         cv::imwrite("pressure_mesh.png", mesh::drawMesh(pressureMesh, scale));
     }
 
-    auto sol = solveNsChorinEigen(velocityMesh, pressureMesh, 1e-4, 2);
+    const float tau = 1e-4;
+    const float maxT = 0.01;
+    auto sol = solveNsChorinEigen(velocityMesh, pressureMesh, tau, maxT);
+
+    mesh::TriangleLookup lookup(velocityMesh, 0.05);
+    std::vector<cv::Scalar> colorScale{cv::Scalar(128, 0, 0), cv::Scalar(0, 0, 128), cv::Scalar(0, 200, 200)};
+    const float velocityStep = 0.025;
+    const float velocityScale = 0.05;
+    for (int i = 0; i < sol.steps.size(); i++)
+    {
+        const auto & s = sol.steps[i];
+        const cv::Mat img = mesh::drawCfd(lookup, colorScale, 800, velocityScale, velocityStep, velocityMesh, pressureMesh,
+                                          s.velocity, s.pressure);
+        const std::string outFname = std::format("out_{}_time_{}.png", i, s.time);
+        std::cout << outFname << "\n";
+        cv::imwrite(outFname, img);
+    }
 
     return 0;
 }

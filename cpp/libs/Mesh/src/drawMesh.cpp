@@ -1,9 +1,12 @@
 #include <mesh/drawMesh.h>
 
 #include <limits>
+#include <cassert>
+#include <span>
 
 #include <mesh/interpolator.h>
 #include <mesh/colorScale.h>
+#include <mesh/triangleLookup.h>
 
 namespace mesh
 {
@@ -128,6 +131,129 @@ namespace mesh
                 pix[0] = color[0];
                 pix[1] = color[1];
                 pix[2] = color[2];
+            }
+        }
+
+        return result;
+    }
+
+    cv::Mat drawCfd(const TriangleLookup & triangleLookup, const std::vector<cv::Scalar> & pressureColors,
+                    const float imgScale, const float velocityScale, const float velocityStep,
+                    const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
+                    const std::vector<float> & velocityXy, const std::vector<float> & pressure)
+    {
+        const int width = triangleLookup.width * imgScale + 1;
+        const int height = triangleLookup.height * imgScale + 1;
+        const float invS = 1.0f / imgScale;
+
+        cv::Mat result = cv::Mat::zeros(height, width, CV_8UC3);
+
+        const int numVelocityNodes = velocityMesh.nodes.size();
+        const int numPressureNodes = pressureMesh.nodes.size();
+
+        assert(velocityXy.size() == 2 * numVelocityNodes);
+        assert(pressure.size() == numPressureNodes);
+
+        const std::span<const float> vx(velocityXy.data(), numVelocityNodes);
+        const std::span<const float> vy(velocityXy.data() + numVelocityNodes, numVelocityNodes);
+
+        const int elSizeV = velocityMesh.getElementSize();
+        const int elSizeP = pressureMesh.getElementSize();
+
+        std::vector<int> velocityIds(elSizeV);
+        std::vector<int> pressureIds(elSizeP);
+
+        std::vector<float> localVx(elSizeV), localVy(elSizeV);
+        std::vector<float> localPressure(elSizeP);
+
+        // Find range of pressure
+        auto [minPIt, maxPIt] = std::minmax_element(pressure.begin(), pressure.end());
+        const float minPressure = *minPIt;
+        const float maxPressure = *maxPIt + 1e-3f;
+        SimpleColorScale pressureCc(minPressure, maxPressure, pressureColors);
+
+        // Draw pressure
+        auto pressureValue = el::getValueFunction(pressureMesh.baseElement.type);
+        assert(pressureValue);
+        int lastTriangleId = 0;
+        for (int iy = 0; iy < height; iy++)
+        {
+            const float y = (height - 1 - iy) * invS + triangleLookup.minY;
+            uint8_t * line = result.ptr<uint8_t>(iy);
+            for (int ix = 0; ix < width; ix++)
+            {
+                const float x = ix * invS + triangleLookup.minX;
+                
+                const auto t = triangleLookup.lookup(x, y, &lastTriangleId);
+                if (!t)
+                {
+                    continue;
+                }
+
+                pressureMesh.getElement(t->triangleId, pressureIds.data(), 0);
+                for (int i = 0; i < elSizeP; i++)
+                {
+                    const int j = pressureIds[i];
+                    localPressure[i] = pressure[j];
+                }
+
+                const float pVal = pressureValue(t->localX, t->localY, localPressure.data());
+                const auto color = pressureCc(pVal);
+               
+                uint8_t * pix = line + 3 * ix;
+                pix[0] = color[0];
+                pix[1] = color[1];
+                pix[2] = color[2];
+            }
+        }
+
+        // Draw velocities
+        auto velocityValue = el::getValueFunction(velocityMesh.baseElement.type);
+        assert(velocityValue);
+        const float maxX = triangleLookup.minX + triangleLookup.width;
+        const float maxY = triangleLookup.minY + triangleLookup.height;
+
+        auto toImg = [&](const float x, const float y) -> cv::Point2i
+        {
+            cv::Point2i result;
+            result.x = (x - triangleLookup.minX) * imgScale + 0.5;
+            result.y = height - 1 - ((y - triangleLookup.minY) * imgScale + 0.5);
+            return result;
+        };
+
+        const cv::Scalar velocityColor(255, 255, 255);
+        for (float y = triangleLookup.minY + velocityStep / 2; y <= maxY - velocityStep / 2; y += velocityStep)
+        {
+            for (float x = triangleLookup.minX + velocityStep / 2; x <= maxX - velocityStep / 2; x += velocityStep)
+            {
+                const auto t = triangleLookup.lookup(x, y, &lastTriangleId);
+                if (!t)
+                {
+                    continue;
+                }
+
+                velocityMesh.getElement(t->triangleId, velocityIds.data(), 0);
+                for (int i = 0; i < elSizeV; i++)
+                {
+                    const int j = velocityIds[i];
+                    localVx[i] = vx[j];
+                    localVy[i] = vy[j];
+                }
+
+                const float dx = velocityValue(t->localX, t->localY, localVx.data());
+                const float dy = velocityValue(t->localX, t->localY, localVy.data());
+                
+                const float tx = x + velocityScale * dx;
+                const float ty = y + velocityScale * dy;
+
+                const auto origin = toImg(x, y);
+                const auto dst = toImg(tx, ty);
+
+                // cv::Vec3b localColor = result.at<cv::Vec3b>(origin.y, origin.x);
+                // const cv::Scalar invertedColor(255 - localColor[0], 255 - localColor[1], 255 - localColor[2]);
+
+                cv::circle(result, origin, 1, velocityColor, cv::FILLED);
+                cv::line(result, origin, dst, velocityColor);
             }
         }
 
