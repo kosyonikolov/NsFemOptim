@@ -18,7 +18,7 @@ namespace mesh
             PtsStart
         };
 
-        el::Element baseElement;
+        const el::Element * baseElement;
         std::vector<el::Point> nodes;
 
         int numElements;

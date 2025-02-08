@@ -4,8 +4,6 @@
 #include <optional>
 #include <vector>
 
-#include <element/calc.h>
-
 #include <mesh/triangleLookup.h>
 
 namespace mesh
@@ -16,7 +14,7 @@ namespace mesh
         
         std::vector<float> values;
 
-        el::ValueFn valueFn;
+        const el::Element * element;
 
         mutable int lastElementId = -1;
 

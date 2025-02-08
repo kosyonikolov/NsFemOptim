@@ -109,21 +109,15 @@ namespace el
         return m[0][0] * m[1][1] - m[0][1] * m[1][0];
     }
 
-    TriangleIntegrator::TriangleIntegrator(const Element & element, const int degree, const std::optional<Element> & secondaryElement)
+    TriangleIntegrator::TriangleIntegrator(const Element * element, const int degree, const Element * secondaryElement)
         : element(element), element2(secondaryElement)
     {
-        nDof = dof(element.type);
-        shapeFn = getShapeFunction(element.type);
-        shapeGradFn = getShapeGradFunction(element.type);
-        valueFn = getValueFunction(element.type);
+        nDof = element->dof();
 
         int maxDof = nDof;
         if (secondaryElement)
         {
-            const auto & s = secondaryElement.value();
-            nDof2 = dof(s.type);
-            shapeFn2 = getShapeFunction(s.type);
-            shapeGradFn2 = getShapeGradFunction(s.type);
+            nDof2 = secondaryElement->dof();
             maxDof = std::max(maxDof, nDof2);
         }
 
@@ -142,7 +136,7 @@ namespace el
 
         for (const auto [x, y, w] : intPts)
         {
-            shapeFn(x, y, phi.data());
+            element->shape(x, y, phi.data());
             for (int i = 0; i < nDof; i++)
             {
                 float * row = dst.ptr<float>(i);
@@ -187,7 +181,7 @@ namespace el
         float * gradY = grad.ptr<float>(1);
         for (const auto [x, y, w] : intPts)
         {
-            shapeGradFn(x, y, gradX, gradY);
+            element->grad(x, y, gradX, gradY);
             const float totalW = w * invAbsDetJ;
             const cv::Mat contrib = grad.t() * btb * grad * totalW;
             // std::cout << contrib << "\n";
@@ -208,8 +202,8 @@ namespace el
         float * gradY = grad.ptr<float>(1);
         for (const auto [x, y, w] : intPts)
         {
-            shapeFn(x, y, phi.data());
-            shapeGradFn(x, y, gradX, gradY);
+            element->shape(x, y, phi.data());
+            element->grad(x, y, gradX, gradY);
             // Compute global flow
             Point globalFlow{0,0};
             for (int i = 0; i < nDof; i++)
@@ -243,25 +237,21 @@ namespace el
             throw std::runtime_error(std::format("{}: No secondary element in integrator", __FUNCTION__));
         }
 
-        int dofM, dofS;
-        ShapeFn shapeS;
-        ShapeGradFn gradM;
+        const Element * m = 0;
+        const Element * s = 0;
         if (swapElems)
         {
-            gradM = shapeGradFn2;
-            dofM = nDof2;
-            shapeS = shapeFn;
-            dofS = nDof;
+            m = element2;
+            s = element;
         }
         else
         {
-            gradM = shapeGradFn;
-            dofM = nDof;
-            shapeS = shapeFn2;
-            dofS = nDof2;
+            m = element;
+            s = element2;
         }
-        assert(shapeS);
-        assert(gradM);
+
+        const int dofM = m->dof();
+        const int dofS = s->dof();
         assert(dofM > 0);
         assert(dofS > 0);
 
@@ -282,8 +272,8 @@ namespace el
         cv::Mat globalGrad;
         for (const auto [x, y, w] : intPts)
         {
-            shapeS(x, y, phi.data());
-            gradM(x, y, gradX, gradY);
+            s->shape(x, y, phi.data());
+            m->grad(x, y, gradX, gradY);
             globalGrad = b * localGrad;
             const float * globalGradX = globalGrad.ptr<float>(0);
             const float * globalGradY = globalGrad.ptr<float>(1);

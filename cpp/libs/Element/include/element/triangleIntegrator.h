@@ -2,12 +2,10 @@
 #define LIBS_ELEMENT_INCLUDE_ELEMENT_TRIANGLEINTEGRATOR
 
 #include <vector>
-#include <optional>
 
 #include <opencv2/opencv.hpp>
 
 #include <element/affineTransform.h>
-#include <element/calc.h>
 #include <element/element.h>
 
 namespace el
@@ -30,17 +28,12 @@ namespace el
     class TriangleIntegrator
     {
         // Main element
-        Element element;
+        const Element * element;
         int nDof;
-        ShapeFn shapeFn;
-        ShapeGradFn shapeGradFn;
-        ValueFn valueFn;
 
         // Secondary element
-        std::optional<Element> element2;
-        int nDof2 = 0;
-        ShapeFn shapeFn2 = 0;
-        ShapeGradFn shapeGradFn2 = 0;
+        const Element * element2 = 0;
+        int nDof2;
 
         // 2D points on reference triangle
         std::vector<IntegrationPoint> intPts;
@@ -54,7 +47,7 @@ namespace el
         mutable std::vector<float> gradFlowDot; // DOF
 
     public:
-        TriangleIntegrator(const Element & element, const int degree, const std::optional<Element> & secondaryElement = {});
+        TriangleIntegrator(const Element * element, const int degree, const Element * secondaryElement = 0);
 
         void integrateLocalMassMatrix(const AffineTransform & t, cv::Mat & dst) const;
 
@@ -71,7 +64,7 @@ namespace el
 
             for (const auto [x, y, w] : intPts)
             {
-                shapeFn(x, y, phi.data());
+                element->shape(x, y, phi.data());
                 const auto globalPt = t(Point{x, y});
                 const float v = func(globalPt.x, globalPt.y);
                 const float totalW = w * absDetJ * v;
@@ -112,7 +105,7 @@ namespace el
                 const float normalFlow = globalFlow.x * globalNormal.x + globalFlow.y * globalNormal.y;
                 const float totalW = w * normalFlow;
 
-                shapeFn(refPt.x, refPt.y, phi.data());
+                element->shape(refPt.x, refPt.y, phi.data());
                 for (int i = 0; i < nDof; i++)
                 {
                     dst[i] += phi[i] * totalW;
@@ -135,8 +128,8 @@ namespace el
             float * gradY = grad.ptr<float>(1);
             for (const auto [x, y, w] : intPts)
             {
-                shapeFn(x, y, phi.data());
-                shapeGradFn(x, y, gradX, gradY);
+                element->shape(x, y, phi.data());
+                element->grad(x, y, gradX, gradY);
                 const auto globalPt = tFwd(Point{x, y});
                 const Point globalFlow = flowFunc(globalPt);
                 const Point localFlow{b.at<float>(0, 0) * globalFlow.x + b.at<float>(1, 0) * globalFlow.y,

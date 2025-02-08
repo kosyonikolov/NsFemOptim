@@ -4,7 +4,7 @@
 #include <string>
 
 #include <element/affineTransform.h>
-#include <element/calc.h>
+#include <element/factory.h>
 
 #include <mesh/colorScale.h>
 #include <mesh/concreteMesh.h>
@@ -17,15 +17,15 @@ template <el::Type t>
 void testShapeFunctions()
 {
     const auto elem = el::createElement(t);
-    constexpr int nDof = el::dof<t>();
-    const auto pts = elem.getAllNodes();
+    const int nDof = elem->dof();
+    const auto pts = elem->nodes();
     assert(nDof == pts.size());
 
     const float eps = 1e-6;
-    std::array<float, nDof> shapeVals;
+    std::vector<float> shapeVals(nDof);
     for (int i = 0; i < nDof; i++)
     {
-        el::shape<t>(pts[i].x, pts[i].y, shapeVals.data());
+        elem->shape(pts[i].x, pts[i].y, shapeVals.data());
         for (int k = 0; k < nDof; k++)
         {
             const float target = k == i ? 1 : 0;
@@ -106,14 +106,14 @@ int main(int argc, char ** argv)
     const auto baseElement = el::createElement(elementType);
 
     {
-        const auto nodes = baseElement.getAllNodes();
+        const auto nodes = baseElement->nodes();
         for (const auto & node : nodes)
         {
             std::cout << std::format("{} {}\n", node.x, node.y);
         }
     }
 
-    auto mesh = mesh::createMesh(triMesh, baseElement);
+    auto mesh = mesh::createMesh(triMesh, *baseElement);
 
     if (true)
     {
@@ -122,7 +122,7 @@ int main(int argc, char ** argv)
         assert(mesh.numElements == triMesh.elements.size());
         const int nElements = mesh.numElements;
 
-        const auto refPts = mesh.baseElement.getAllNodes();
+        const auto refPts = mesh.baseElement->nodes();
         const int elSize = refPts.size();
         assert(elSize == mesh.getElementSize());
 

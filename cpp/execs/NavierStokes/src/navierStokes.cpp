@@ -6,8 +6,8 @@
 #include <Eigen/Sparse>
 
 #include <element/affineTransform.h>
-#include <element/calc.h>
 #include <element/triangleIntegrator.h>
+#include <element/factory.h>
 
 #include <mesh/colorScale.h>
 #include <mesh/concreteMesh.h>
@@ -619,8 +619,8 @@ int main(int argc, char ** argv)
     const auto velocityElement = el::createElement(el::Type::P2);
     const auto pressureElement = el::createElement(el::Type::P1);
 
-    auto velocityMesh = mesh::createMesh(triMesh, velocityElement);
-    auto pressureMesh = mesh::createMesh(triMesh, pressureElement);
+    auto velocityMesh = mesh::createMesh(triMesh, *velocityElement);
+    auto pressureMesh = mesh::createMesh(triMesh, *pressureElement);
 
     if (true)
     {

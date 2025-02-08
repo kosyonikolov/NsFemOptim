@@ -2,28 +2,41 @@
 #define LIBS_ELEMENT_INCLUDE_ELEMENT_ELEMENT
 
 #include <vector>
+#include <span>
 
 #include <element/point.h>
 #include <element/type.h>
 
 namespace el
 {
-    struct Element
+    // Interface for triangular elements
+    class Element
     {
-        Type type;
-
-        int ptsPerSide;
+    public:
+        virtual Type type() const = 0;
+        
+        virtual int ptsPerSide() const = 0;
 
         // Internal nodes on the reference triangle ((0,0), (1,0), (0,1))
-        std::vector<Point> internalNodes;
+        virtual std::span<const Point> internalNodes() const = 0;
 
-        int getNodeCount() const;
+        virtual std::span<const Point> nodes() const = 0;
 
-        // <side 0> <side 1> <side 2> <internal>
-        std::vector<Point> getAllNodes() const;
+        virtual int dof() const = 0;
+
+        // Calculate stuff on the reference triangle
+        // All output vectors must have size DOF
+
+        virtual void shape(const float x, const float y, float * dst) const = 0;
+
+        virtual void grad(const float x, const float y, float * dstX, float * dstY) const = 0;
+
+        virtual float value(const float x, const float y, const float * nodeValues) const = 0;
+
+        virtual ~Element(){};
     };
 
-    Element createElement(const Type type);
+    std::vector<Point> createTriangleBorderNodes(const int ptsPerSide);
 }
 
 #endif /* LIBS_ELEMENT_INCLUDE_ELEMENT_ELEMENT */

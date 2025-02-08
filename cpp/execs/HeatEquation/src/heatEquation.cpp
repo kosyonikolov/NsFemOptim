@@ -6,8 +6,8 @@
 #include <Eigen/Sparse>
 
 #include <element/affineTransform.h>
-#include <element/calc.h>
 #include <element/triangleIntegrator.h>
+#include <element/factory.h>
 
 #include <mesh/colorScale.h>
 #include <mesh/concreteMesh.h>
@@ -742,7 +742,7 @@ int main(int argc, char ** argv)
     const auto elementType = el::Type::P1;
     const auto baseElement = el::createElement(elementType);
 
-    auto mesh = mesh::createMesh(triMesh, baseElement);
+    auto mesh = mesh::createMesh(triMesh, *baseElement);
 
     std::vector<float> nodeValues = solveHeatEquation4(mesh);
     // std::vector<float> nodeValues = solveHeatEquation2(mesh);

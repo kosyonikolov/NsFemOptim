@@ -168,8 +168,7 @@ namespace mesh
         std::vector<float> localPressure(elSizeP);
 
         // Draw pressure
-        auto pressureValue = el::getValueFunction(pressureMesh.baseElement.type);
-        assert(pressureValue);
+        auto pressureElem = pressureMesh.baseElement;
         int lastTriangleId = 0;
         for (int iy = 0; iy < height; iy++)
         {
@@ -192,7 +191,7 @@ namespace mesh
                     localPressure[i] = pressure[j];
                 }
 
-                const float pVal = pressureValue(t->localX, t->localY, localPressure.data());
+                const float pVal = pressureElem->value(t->localX, t->localY, localPressure.data());
                 const auto color = pressureScale(pVal);
                
                 uint8_t * pix = line + 3 * ix;
@@ -203,8 +202,7 @@ namespace mesh
         }
 
         // Draw velocities
-        auto velocityValue = el::getValueFunction(velocityMesh.baseElement.type);
-        assert(velocityValue);
+        auto velocityElem = velocityMesh.baseElement;
         const float maxX = triangleLookup.minX + triangleLookup.width;
         const float maxY = triangleLookup.minY + triangleLookup.height;
 
@@ -235,8 +233,8 @@ namespace mesh
                     localVy[i] = vy[j];
                 }
 
-                const float dx = velocityValue(t->localX, t->localY, localVx.data());
-                const float dy = velocityValue(t->localX, t->localY, localVy.data());
+                const float dx = velocityElem->value(t->localX, t->localY, localVx.data());
+                const float dy = velocityElem->value(t->localX, t->localY, localVy.data());
                 
                 const float tx = x + velocityScale * dx;
                 const float ty = y + velocityScale * dy;

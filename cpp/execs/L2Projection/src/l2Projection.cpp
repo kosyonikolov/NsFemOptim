@@ -6,7 +6,7 @@
 #include <Eigen/Sparse>
 
 #include <element/affineTransform.h>
-#include <element/calc.h>
+#include <element/factory.h>
 #include <element/triangleIntegrator.h>
 
 #include <mesh/colorScale.h>
@@ -154,7 +154,7 @@ int main(int argc, char ** argv)
     const auto elementType = el::Type::P2;
     const auto baseElement = el::createElement(elementType);
 
-    auto mesh = mesh::createMesh(triMesh, baseElement);
+    auto mesh = mesh::createMesh(triMesh, *baseElement);
 
     std::vector<float> projValues = projectValues(mesh);
 

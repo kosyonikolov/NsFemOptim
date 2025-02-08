@@ -1,36 +1,21 @@
 #include <element/element.h>
 
-#include <stdexcept>
 #include <cassert>
-#include <algorithm>
 
 namespace el
 {
-    int Element::getNodeCount() const
+    std::vector<Point> createTriangleBorderNodes(const int ptsPerSide)
     {
-        assert(ptsPerSide != 1); // Noncomforming not supported yet
+        assert(ptsPerSide != 1); // Nonconforming P1 not supported yet
         if (ptsPerSide < 2)
         {
-            return internalNodes.size();
-        }
-
-        const int extraNodesPerSide = ptsPerSide - 2;
-        const int borderNodes = 3 + 3 * extraNodesPerSide;
-        return borderNodes + internalNodes.size();
-    }
-
-    std::vector<Point> Element::getAllNodes() const
-    {
-        assert(ptsPerSide != 1); // Noncomforming not supported yet
-        if (ptsPerSide < 2)
-        {
-            return internalNodes;
+            return {};
         }
 
         const int extraNodesPerSide = ptsPerSide - 2;
         const int borderNodes = 3 + 3 * extraNodesPerSide;
 
-        std::vector<Point> result(borderNodes + internalNodes.size());
+        std::vector<Point> result(borderNodes);
         
         const int sideStep = ptsPerSide - 1;
         // Corners
@@ -56,32 +41,6 @@ namespace el
             }
         }
 
-        std::copy(internalNodes.begin(), internalNodes.end(), result.begin() + borderNodes);
         return result;
-    };
-
-    Element createElement(const Type type)
-    {
-        Element result;
-        result.type = type;
-
-        if (type == Type::P0)
-        {
-            result.ptsPerSide = 0;
-            result.internalNodes = {Point{1.0 / 3, 1.0 / 3}};
-            return result;
-        }
-        if (type == Type::P1)
-        {
-            result.ptsPerSide = 2;
-            return result;
-        }
-        if (type == Type::P2)
-        {
-            result.ptsPerSide = 3;
-            return result;
-        }
-
-        throw std::invalid_argument("Invalid element type");
     }
 } // namespace mesh

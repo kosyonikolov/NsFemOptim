@@ -14,12 +14,7 @@ namespace mesh
             throw std::invalid_argument(std::format("{}: Bad segment size [{}]", __FUNCTION__, h));
         }
 
-        valueFn = el::getValueFunction(mesh.baseElement.type);
-        if (!valueFn)
-        {
-            throw std::invalid_argument(std::format("{}: Couldn't obtain value function (element type = {})",
-                                                    __FUNCTION__, static_cast<int>(mesh.baseElement.type)));
-        }
+        element = mesh.baseElement;
 
         const int elemSize = mesh.getElementSize();
         ptIds.resize(elemSize);
@@ -44,8 +39,7 @@ namespace mesh
             ptValues[i] = values[j];
         }
 
-        assert(valueFn);
-        const float value = valueFn(t->localX, t->localY, ptValues.data());
+        const float value = element->value(t->localX, t->localY, ptValues.data());
         return value;
     }
 

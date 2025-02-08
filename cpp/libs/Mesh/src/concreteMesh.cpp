@@ -9,12 +9,12 @@ namespace mesh
 {
     int ConcreteMesh::getElementSize() const
     {
-        return baseElement.getNodeCount();
+        return baseElement->nodes().size();
     }
 
     int ConcreteMesh::getBorderElementSize() const
     {
-        return baseElement.ptsPerSide;
+        return baseElement->ptsPerSide();
     }
 
     void ConcreteMesh::getElement(const int id, int * ids, el::Point * pts) const
@@ -41,7 +41,7 @@ namespace mesh
     void ConcreteMesh::getBorderElement(const int id, int & triangleId, int & side, int & group, int * ptsIds, el::Point * pts) const
     {
         assert(id >= 0 && id < numBorderElements);
-        const int nPts = baseElement.ptsPerSide;
+        const int nPts = baseElement->ptsPerSide();
         const int step = BorderElementOrder::PtsStart + nPts;
         const int offset = id * step;
         const int * src = borderElements.data() + offset;
@@ -78,7 +78,7 @@ namespace mesh
     ConcreteMesh createMesh(const TriangleMesh & triMesh, const el::Element & baseElement)
     {
         ConcreteMesh result;
-        result.baseElement = baseElement;
+        result.baseElement = &baseElement;
 
         // Create all the nodes first, posibly adding new ones
 
@@ -129,7 +129,7 @@ namespace mesh
         }
 
         // Loop over each side and create the extra points
-        const int extraNodesPerSide = std::max(0, baseElement.ptsPerSide - 2);
+        const int extraNodesPerSide = std::max(0, baseElement.ptsPerSide() - 2);
         if (extraNodesPerSide > 0)
         {
             const float h = 1.0f / (extraNodesPerSide + 1);
@@ -190,17 +190,17 @@ namespace mesh
 
         // Create each element, adding internal points if necessary
         result.numElements = triMesh.elements.size();
-        const int nodesPerElement = baseElement.getNodeCount();
+        const int nodesPerElement = baseElement.nodes().size();
         const int elementBufferSize = nodesPerElement * triMesh.elements.size();
         result.elements.resize(elementBufferSize);
         result.elementTransforms.resize(result.numElements);
         result.invElementTransforms.resize(result.numElements);
 
-        const auto baseInternal = baseElement.internalNodes;
+        const auto baseInternal = baseElement.internalNodes();
         const int numInternal = baseInternal.size();
-        const int elementSideStep = std::max(0, baseElement.ptsPerSide - 1);
+        const int elementSideStep = std::max(0, baseElement.ptsPerSide() - 1);
 
-        if (baseElement.type == el::Type::P0)
+        if (baseElement.type() == el::Type::P0)
         {
             // The original corners do not participate in the mesh
             result.nodes.clear();
@@ -238,7 +238,7 @@ namespace mesh
                     const int idA = srcIds[a];
                     const int idB = srcIds[b];
                     int * extraIds = ids + a * elementSideStep + 1;
-                    const bool ok = getSideExtraIds(idA, idB, extraIds, extraNodesPerSide);
+                    [[maybe_unused]] const bool ok = getSideExtraIds(idA, idB, extraIds, extraNodesPerSide);
                     assert(ok);
                 }
             }
@@ -259,7 +259,7 @@ namespace mesh
 
         // Create border elements
         result.numBorderElements = triMesh.borderElements.size();
-        const int borderElementStep = baseElement.ptsPerSide + 3;
+        const int borderElementStep = baseElement.ptsPerSide() + 3;
         const int borderBuffSize = borderElementStep * result.numBorderElements;
         result.borderElements.resize(borderBuffSize);
         for (int i = 0; i < result.numBorderElements; i++)
@@ -280,7 +280,7 @@ namespace mesh
                 dst[borderElementStep - 1] = idB;
                 if (extraNodesPerSide > 0)
                 {
-                    const bool ok = getSideExtraIds(idA, idB, dst + 4, extraNodesPerSide);
+                    [[maybe_unused]] const bool ok = getSideExtraIds(idA, idB, dst + 4, extraNodesPerSide);
                     assert(ok);
                 }
             }
