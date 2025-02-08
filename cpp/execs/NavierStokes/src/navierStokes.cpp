@@ -2,6 +2,7 @@
 #include <format>
 #include <iostream>
 #include <string>
+#include <filesystem>
 
 #include <Eigen/Sparse>
 
@@ -16,6 +17,9 @@
 #include <mesh/interpolator.h>
 #include <mesh/io.h>
 #include <mesh/triangleLookup.h>
+
+#include <NavierStokes/nsConfig.h>
+#include <NavierStokes/dfgCondtions.h>
 
 using SolType = double;
 using SpMat = Eigen::SparseMatrix<SolType>;
@@ -55,16 +59,6 @@ float calcDirichletVx(const mesh::ConcreteMesh & mesh, const int nodeId, const i
         const float v = 20 * y * (0.41 - y) / (0.41 * 0.41);
         return v;
     }
-    return 0;
-}
-
-float calcDirichletVy(const mesh::ConcreteMesh &, const int, const int)
-{
-    return 0;
-}
-
-float calcDirichletPressure(const mesh::ConcreteMesh &, const int, const int)
-{
     return 0;
 }
 
@@ -166,7 +160,7 @@ std::vector<Triplet> projectTriplets(const int numNodes, const std::vector<Tripl
 };
 
 Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
-                            const float timeStep0, const float maxT)
+                            const DfgConditions & cond, const float timeStep0, const float maxT)
 {
     assert(velocityMesh.groups.size() == pressureMesh.groups.size());
     assert(velocityMesh.numElements == pressureMesh.numElements);
@@ -206,16 +200,36 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     const int numPressureNodes = pressureMesh.nodes.size();
 
     // ======================================== Collect Dirichlet nodes ========================================
+
+    auto dirichletZero = [](const mesh::ConcreteMesh &, const int, const int) -> float
+    {
+        return 0.0f;
+    };
+
+    auto calcDirichletVx = [&](const mesh::ConcreteMesh & mesh, const int nodeId, const int borderId) -> float
+    {
+        assert(borderId >= 0 && borderId < mesh.groups.size());
+        const auto & group = mesh.groups[borderId];
+        if (group == "Left")
+        {
+            const auto & node = mesh.nodes[nodeId];
+            const float y = node.y;
+            const float v = cond.calcLeftVelocity(y);
+            return v;
+        }
+        return 0;
+    };
+
     // Velocity
     const std::vector<int> velocityBorderIds = {idLeft, idTop, idBottom, idCircle};
     const auto dirichletVx = extractDirichletNodes(velocityMesh, velocityBorderIds, calcDirichletVx);
-    const auto dirichletVy = extractDirichletNodes(velocityMesh, velocityBorderIds, calcDirichletVy);
+    const auto dirichletVy = extractDirichletNodes(velocityMesh, velocityBorderIds, dirichletZero);
     assert(dirichletVx.size() == dirichletVy.size());
     const auto internalVelocityNodes = extractInternalNodes(numVelocityNodes, dirichletVx);
 
     // Pressure
     const std::vector<int> pressureBorderIds = {idRight};
-    const auto dirichletPressure = extractDirichletNodes(pressureMesh, pressureBorderIds, calcDirichletPressure);
+    const auto dirichletPressure = extractDirichletNodes(pressureMesh, pressureBorderIds, dirichletZero);
     const auto internalPressureNodes = extractInternalNodes(numPressureNodes, dirichletPressure);
     const int numInternalPressureNodes = internalPressureNodes.size();
     // =========================================================================================================
@@ -346,7 +360,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
     // =========================================================================================================
 
-    const float viscosity = 0.001;
+    const float viscosity = cond.viscosity;
 
     std::vector<float> velocityXy(2 * numVelocityNodes, 0);
     std::span<float> velocityX(velocityXy.data(), numVelocityNodes);
@@ -606,14 +620,18 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
 int main(int argc, char ** argv)
 {
-    const std::string usageMsg = "./NavierStokes <msh file>";
-    if (argc != 2)
+    const std::string usageMsg = "./NavierStokes <config> <msh file> <output dir>";
+    if (argc != 4)
     {
         std::cerr << usageMsg << "\n";
         return 1;
     }
 
-    const std::string meshFileName = argv[1];
+    const std::string cfgFname = argv[1];
+    const std::string meshFileName = argv[2];
+    const std::string outputDir = argv[3];
+
+    auto cfg = parseNsConfig(cfgFname);
     auto triMesh = mesh::parseTriangleGmsh(meshFileName);
 
     const auto velocityElement = el::createElement(el::Type::P2);
@@ -629,9 +647,13 @@ int main(int argc, char ** argv)
         cv::imwrite("pressure_mesh.png", mesh::drawMesh(pressureMesh, scale));
     }
 
-    const float tau = 1e-4;
-    const float maxT = 1;
-    auto sol = solveNsChorinEigen(velocityMesh, pressureMesh, tau, maxT);
+    DfgConditions cond;
+    cond.viscosity = cfg.viscosity;
+    cond.peakVelocity = cfg.peakVelocity;
+
+    const float tau = cfg.tau;
+    const float maxT = cfg.maxT;
+    auto sol = solveNsChorinEigen(velocityMesh, pressureMesh, cond, tau, maxT);
 
     // Find range of pressure
     float minP = std::numeric_limits<float>::infinity();
@@ -650,17 +672,20 @@ int main(int argc, char ** argv)
     std::vector<cv::Scalar> colors{cv::Scalar(128, 0, 0), cv::Scalar(0, 0, 128), cv::Scalar(0, 200, 200)};
     mesh::SimpleColorScale pressureColorScale(minP, maxP, colors);
 
+    std::filesystem::create_directories(outputDir);
+
     mesh::TriangleLookup lookup(velocityMesh, 0.05);
-    const float velocityStep = 0.025;
-    const float velocityScale = 0.05 / 20;
-    for (int i = 0; i < sol.steps.size(); i++)
+    const float velocityStep = cfg.output.velocityStep;
+    const float velocityScale = cfg.output.velocityScale / cfg.peakVelocity;
+    int j = 0;
+    for (int i = 0; i < sol.steps.size(); i += cfg.output.frameStep, j++)
     {
         const auto & s = sol.steps[i];
         const cv::Mat img = mesh::drawCfd(lookup, pressureColorScale, 800,
                                           velocityScale, velocityStep,
                                           velocityMesh, pressureMesh,
                                           s.velocity, s.pressure);
-        const std::string outFname = std::format("out_{}.png", i);
+        const std::string outFname = std::format("{}/out_{}.png", outputDir, j);
         std::cout << outFname << "\n";
         cv::imwrite(outFname, img);
     }
