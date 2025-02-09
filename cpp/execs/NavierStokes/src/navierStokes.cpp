@@ -1,14 +1,14 @@
 #include <cassert>
+#include <filesystem>
 #include <format>
 #include <iostream>
 #include <string>
-#include <filesystem>
 
 #include <Eigen/Sparse>
 
 #include <element/affineTransform.h>
-#include <element/triangleIntegrator.h>
 #include <element/factory.h>
+#include <element/triangleIntegrator.h>
 
 #include <mesh/colorScale.h>
 #include <mesh/concreteMesh.h>
@@ -18,8 +18,10 @@
 #include <mesh/io.h>
 #include <mesh/triangleLookup.h>
 
-#include <NavierStokes/nsConfig.h>
+#include <utils/stopwatch.h>
+
 #include <NavierStokes/dfgCondtions.h>
+#include <NavierStokes/nsConfig.h>
 
 using SolType = double;
 using SpMat = Eigen::SparseMatrix<SolType>;
@@ -479,6 +481,9 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
     for (int iT = 0; iT <= numTimeSteps; iT++)
     {
+        u::Stopwatch bigSw;
+        u::Stopwatch sw;
+
         const float currTime = iT * tau;
         std::cout << std::format("{} / {}: time = {}\n", iT, numTimeSteps, currTime);
         result.steps[iT].time = currTime;
@@ -490,6 +495,8 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         // The system for a is [M 0; 0 M] [a_x; a_y] = [A 0; 0 A] [q_x; q_y], where A = viscosity * M1 + C
         // Since the system is effectively the same for a_x and a_y, we can solve M [a_x a_y] = A [q_x q_y]
         assembleConvection();
+        const auto tAsmConvection = sw.millis(true);
+
         auto A = viscosity * velocityStiffness + convection;
         Eigen::Matrix<SolType, Eigen::Dynamic, 2> velocityMatrix(numVelocityNodes, 2);
         Vector tentativeVelocityXy(2 * numVelocityNodes);
@@ -516,6 +523,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             tentativeVelocityXy(i + numVelocityNodes) -= tau * accel(i, 1);
             // clang-format on
         }
+        const auto tTentative = sw.millis(true);
 
         if (false)
         {
@@ -563,6 +571,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             const int j = internalPressureNodes[i];
             pressure[j] = pressureInt[i];
         }
+
         if (false)
         {
             std::vector<float> dbg(numPressureNodes);
@@ -581,18 +590,24 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             outP[i] = pressure[i];
         }
 
+        const auto tPressure = sw.millis(true);
+
         // 3) Find the final velocity by updating the tentative
         // (u_{i+1} - u_*) / tau = -nabla(p) <=> a = nabla(p) <=> (a, v) = (nabla(p), v)
         // Then update: u_{i+1} = u_* + tau * a
-        auto nablaPXy = pressureVelocityDiv * pressure;
+        Vector nablaPXy = pressureVelocityDiv * pressure;
+        const auto tCalcNablaPxy = sw.millis(true);
         Eigen::Matrix<SolType, Eigen::Dynamic, 2> nablaP(numVelocityNodes, 2);
         for (int i = 0; i < numVelocityNodes; i++)
         {
             nablaP(i, 0) = nablaPXy(i);
             nablaP(i, 1) = nablaPXy(i + numVelocityNodes);
         }
+        const auto tCalcNablaP = sw.millis(true);
 
         Eigen::Matrix<SolType, Eigen::Dynamic, 2> accelFinal = velocityMassSolver.solve(nablaP);
+        const auto tSolveFinal = sw.millis(true);
+
         for (int i = 0; i < numVelocityNodes; i++)
         {
             // clang-format off
@@ -600,6 +615,9 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             velocityY[i] = tentativeVelocityXy(i + numVelocityNodes) - tau * accelFinal(i, 1);
             // clang-format on
         }
+
+        const auto tUpdateFinal = sw.millis();
+
         imposeDirichletVelocity();
         result.steps[iT].velocity = velocityXy;
 
@@ -613,6 +631,10 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             }
             drawVelocity(std::format("velocity_{}", iT), dbgVelocityX, dbgVelocityY, "FINAL");
         }
+
+        const auto tIter = bigSw.millis();
+        std::cout << std::format("Total time = {}, assemble convection = {}, tentative = {}, pressure = {}, nablaPxy = {}, nablaP = {}, solveFinal = {}, updateFinal = {}\n",
+                                 tIter, tAsmConvection, tTentative, tPressure, tCalcNablaPxy, tCalcNablaP, tSolveFinal, tUpdateFinal);
     }
 
     return result;
