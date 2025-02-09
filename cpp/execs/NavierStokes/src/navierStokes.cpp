@@ -31,7 +31,7 @@ using Vector = Eigen::Vector<SolType, Eigen::Dynamic>;
 struct FastConvection
 {
     SpMat convection;
-    SpMat integration;
+    Eigen::SparseMatrix<SolType, Eigen::RowMajor> integration;
     Vector values;
     Vector velocity; // x, then y
 
@@ -125,7 +125,10 @@ struct FastConvection
     {
         const int n = velocity.rows();
         assert(n == velocityXy.size());
-        std::copy_n(velocityXy.data(), n, velocity.data());
+        for (int i = 0; i < n; i++)
+        {
+            velocity[i] = velocityXy[i];
+        }
 
         values = integration * velocity;
         const int nnz = convection.nonZeros();
@@ -350,11 +353,8 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     std::vector<Triplet> velocityPressureDivT;
     std::vector<Triplet> pressureVelocityDivT;
 
-    std::vector<Triplet> convectionT;
-
     SpMat velocityMass(numVelocityNodes, numVelocityNodes);
     SpMat velocityStiffness(numVelocityNodes, numVelocityNodes);
-    SpMat convection(numVelocityNodes, numVelocityNodes);
     SpMat pressureInternalStiffness(numInternalPressureNodes, numInternalPressureNodes);
     SpMat velocityPressureDiv(numPressureNodes, 2 * numVelocityNodes);
     SpMat pressureVelocityDiv(2 * numVelocityNodes, numPressureNodes);
@@ -488,45 +488,6 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
     imposeDirichletVelocity();
 
-    std::vector<float> localVx(elSizeV), localVy(elSizeV);
-    cv::Mat localConvectionMatrix;
-    auto assembleConvection = [&]()
-    {
-        convectionT.clear();
-
-        for (int i = 0; i < nElem; i++)
-        {
-            const auto t = velocityMesh.elementTransforms[i];
-
-            velocityMesh.getElement(i, idsV.data(), ptsV.data());
-            for (int j = 0; j < elSizeV; j++)
-            {
-                const int k = idsV[j];
-                localVx[j] = velocityX[k];
-                localVy[j] = velocityY[k];
-            }
-
-            velocityIntegrator.integrateLocalSelfConvectionMatrix(t, localVx.data(), localVy.data(), localConvectionMatrix);
-            assert(elSizeV == localConvectionMatrix.cols);
-            assert(elSizeV == localConvectionMatrix.rows);
-
-            // Accumulate
-            for (int r = 0; r < elSizeV; r++)
-            {
-                const int i = idsV[r];
-                for (int c = 0; c < elSizeV; c++)
-                {
-                    const int j = idsV[c];
-                    const SolType val = localConvectionMatrix.at<float>(r, c);
-                    const Triplet triplet(i, j, val);
-                    convectionT.push_back(triplet);
-                }
-            }
-        }
-
-        convection.setFromTriplets(convectionT.begin(), convectionT.end());
-    };
-
     FastConvection fastConvection(velocityMesh, velocityIntegrator);
 
     const int numTimeSteps = std::ceil(maxT / timeStep0);
@@ -587,6 +548,9 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         drawVelocity("velocity_initial", dbgVelocityX, dbgVelocityY, "INITIAL");
     }
 
+    SpMat A0 = viscosity * velocityStiffness;
+    SpMat A;
+
     for (int iT = 0; iT <= numTimeSteps; iT++)
     {
         u::Stopwatch bigSw;
@@ -603,30 +567,9 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         // The system for a is [M 0; 0 M] [a_x; a_y] = [A 0; 0 A] [q_x; q_y], where A = viscosity * M1 + C
         // Since the system is effectively the same for a_x and a_y, we can solve M [a_x a_y] = A [q_x q_y]
         fastConvection.update(velocityXy);
-        assembleConvection();
-        {
-            const auto & a = convection;
-            const auto & b = fastConvection.convection;
-            
-            const int nnz = a.nonZeros();
-            assert(b.nonZeros() == nnz);
-
-            const auto pA = a.valuePtr();
-            const auto pB = b.valuePtr();
-            for (int i = 0; i < nnz; i++)
-            {
-                const float valA = pA[i];
-                const float valB = pB[i];
-                const float delta = valA - valB;
-                if (std::abs(delta) > 1e-6f)
-                {
-                    std::cout << std::format("i = {}, valA = {}, valB = {}, delta = {}\n", i, valA, valB, delta);
-                }
-            }
-        }
         const auto tAsmConvection = sw.millis(true);
 
-        auto A = viscosity * velocityStiffness + convection;
+        A = A0 + fastConvection.convection;
         Eigen::Matrix<SolType, Eigen::Dynamic, 2> velocityMatrix(numVelocityNodes, 2);
         Vector tentativeVelocityXy(2 * numVelocityNodes);
         for (int i = 0; i < numVelocityNodes; i++)
