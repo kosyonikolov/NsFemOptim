@@ -1,6 +1,6 @@
 #include <linalg/gaussSeidel.h>
 
-#include <iostream>
+// #include <iostream>
 
 namespace linalg
 {
@@ -30,14 +30,16 @@ namespace linalg
     }
 
     template <typename F>
-    double gaussSeidel(const CsrMatrix<F> & m, F * x, const F * b, const int maxIters, const double eps)
+    double gaussSeidel(const CsrMatrix<F> & m, F * x, const F * b, 
+                        const int maxIters, const double eps)
     {
-        double lastRes = 0;
+        double lastRes = -1;
         for (int i = 0; i < maxIters; i++)
         {
             gaussSeidelStep(m, x, b);
+
             lastRes = m.mse(x, b);
-            std::cout << std::format("{}: {}\n", i, lastRes);
+            // std::cout << std::format("{}: {}\n", i, lastRes);
 
             if (lastRes < eps)
             {

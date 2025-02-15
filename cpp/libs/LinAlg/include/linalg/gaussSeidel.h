@@ -6,10 +6,12 @@
 namespace linalg
 {
     template <typename F>
-    double gaussSeidel(const CsrMatrix<F> & m, F * x, const F * b, const int maxIters, const double eps);
+    double gaussSeidel(const CsrMatrix<F> & m, F * x, const F * b,
+                       const int maxIters, const double eps);
 
-    template<typename F, VectorLike<F> A, VectorLike<F> B>
-    double gaussSeidel(const CsrMatrix<F> &m, A & x, const B & b, const int maxIters, const double eps)
+    template <typename F, VectorLike<F> A, VectorLike<F> B>
+    double gaussSeidel(const CsrMatrix<F> & m, A & x, const B & b, 
+                       const int maxIters, const double eps)
     {
         if (x.size() != m.cols)
         {
@@ -23,6 +25,6 @@ namespace linalg
         }
         return gaussSeidel(m, x.data(), b.data(), maxIters, eps);
     }
-}
+} // namespace linalg
 
 #endif /* LIBS_LINALG_INCLUDE_LINALG_GAUSSSEIDEL */
