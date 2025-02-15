@@ -5,7 +5,7 @@
 
 #include <Eigen/Sparse>
 
-#include <linAlg/csrMatrix.h>
+#include <linalg/csrMatrix.h>
 
 namespace linalg
 {

@@ -1,4 +1,4 @@
-#include <linAlg/eigen.h>
+#include <linalg/eigen.h>
 
 #include <algorithm>
 #include <format>

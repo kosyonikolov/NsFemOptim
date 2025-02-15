@@ -1,23 +1,14 @@
 #ifndef LIBS_LINALG_INCLUDE_LINALG_CSRMATRIX
 #define LIBS_LINALG_INCLUDE_LINALG_CSRMATRIX
 
-#include <concepts>
 #include <format>
 #include <stdexcept>
 #include <vector>
 
+#include <linalg/concepts.h>
+
 namespace linalg
 {
-    // clang-format off
-    template <typename C, typename T>
-    concept VectorLike = requires(C a, const C b) 
-    {
-        { a.size() } -> std::convertible_to<size_t>;
-        { a.data() } -> std::convertible_to<T *>;
-        { b.data() } -> std::convertible_to<const T *>;
-    };
-    // clang-format on
-
     template <typename F>
     struct CsrMatrix
     {
@@ -47,6 +38,25 @@ namespace linalg
                                                         __FUNCTION__, dst.size(), rows));
             }
             rMult(src.data(), dst.data());
+        }
+
+        // sqrt((Mx - b).^2 / rows)
+        double mse(const F * x, const F * b) const;
+
+        template <VectorLike<F> A, VectorLike<F> B>
+        double mse(const A & x, const B & b) const
+        {
+            if (x.size() != cols)
+            {
+                throw std::invalid_argument(std::format("{}: Bad size of x vector [{}] - expected {}",
+                                                        __FUNCTION__, x.size(), cols));
+            }
+            if (b.size() != rows)
+            {
+                throw std::invalid_argument(std::format("{}: Bad size of dst vector [{}] - expected {}",
+                                                        __FUNCTION__, b.size(), rows));
+            }
+            return mse(x.data(), b.data());
         }
     };
 } // namespace linalg

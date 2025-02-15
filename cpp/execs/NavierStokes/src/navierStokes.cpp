@@ -18,8 +18,9 @@
 #include <mesh/io.h>
 #include <mesh/triangleLookup.h>
 
-#include <linAlg/csrMatrix.h>
-#include <linAlg/eigen.h>
+#include <linalg/csrMatrix.h>
+#include <linalg/eigen.h>
+#include <linalg/gaussSeidel.h>
 
 #include <utils/stopwatch.h>
 
@@ -555,6 +556,8 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     SpMat A;
 
     auto velocityMassCsr = linalg::csrFromEigen(velocityMass);
+    std::vector<float> tentRhsX(velocityMassCsr.rows);
+    std::vector<float> tentAccX(velocityMassCsr.rows, 0);
 
     for (int iT = 0; iT <= numTimeSteps; iT++)
     {
@@ -587,28 +590,25 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         // Solve for the acceleration
         Eigen::Matrix<SolType, Eigen::Dynamic, 2> accel = velocityMassSolver.solve(accelRhs);
 
-        // Test CSR rMult
+        // Test Gauss-Seidel in shadow mode
         {
             const int r = accel.rows();
-            Vector xEigen(r);
-            std::vector<SolType> xCsr(r);
             for (int i = 0; i < r; i++)
             {
-                xEigen(i) = accel(i, 0);
-                xCsr[i] = accel(i, 0);
+                tentRhsX[i] = accelRhs(i, 0);
             }
 
-            Vector yEigen = velocityMass * xEigen;
-            std::vector<SolType> yCsr(r);
-            velocityMassCsr.rMult(xCsr, yCsr);
+            const double residual = linalg::gaussSeidel(velocityMassCsr, tentAccX, tentRhsX, 100, 1e-9);
+            std::cout << residual << "\n";
+
+            double deltaSum = 0;
             for (int i = 0; i < r; i++)
             {
-                const float delta = yCsr[i] - yEigen(i);
-                if (std::abs(delta) > 1e-6f)
-                {
-                    std::cout << i << ": " << delta << "\n";
-                }
+                const float delta = tentAccX[i] - accel(i, 0);
+                deltaSum += delta * delta;
             }
+            const double mseDirect = std::sqrt(deltaSum / r);
+            std::cout << "MSE direct: " << mseDirect << "\n";
         }   
 
         // Update the velocity
