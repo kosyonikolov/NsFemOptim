@@ -18,13 +18,16 @@
 #include <mesh/io.h>
 #include <mesh/triangleLookup.h>
 
+#include <linAlg/csrMatrix.h>
+#include <linAlg/eigen.h>
+
 #include <utils/stopwatch.h>
 
 #include <NavierStokes/dfgCondtions.h>
 #include <NavierStokes/nsConfig.h>
 
-using SolType = double;
-using SpMat = Eigen::SparseMatrix<SolType>;
+using SolType = float;
+using SpMat = Eigen::SparseMatrix<SolType, Eigen::RowMajor>;
 using Triplet = Eigen::Triplet<SolType>;
 using Vector = Eigen::Vector<SolType, Eigen::Dynamic>;
 
@@ -551,6 +554,8 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     SpMat A0 = viscosity * velocityStiffness;
     SpMat A;
 
+    auto velocityMassCsr = linalg::csrFromEigen(velocityMass);
+
     for (int iT = 0; iT <= numTimeSteps; iT++)
     {
         u::Stopwatch bigSw;
@@ -581,6 +586,30 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
         // Solve for the acceleration
         Eigen::Matrix<SolType, Eigen::Dynamic, 2> accel = velocityMassSolver.solve(accelRhs);
+
+        // Test CSR rMult
+        {
+            const int r = accel.rows();
+            Vector xEigen(r);
+            std::vector<SolType> xCsr(r);
+            for (int i = 0; i < r; i++)
+            {
+                xEigen(i) = accel(i, 0);
+                xCsr[i] = accel(i, 0);
+            }
+
+            Vector yEigen = velocityMass * xEigen;
+            std::vector<SolType> yCsr(r);
+            velocityMassCsr.rMult(xCsr, yCsr);
+            for (int i = 0; i < r; i++)
+            {
+                const float delta = yCsr[i] - yEigen(i);
+                if (std::abs(delta) > 1e-6f)
+                {
+                    std::cout << i << ": " << delta << "\n";
+                }
+            }
+        }   
 
         // Update the velocity
         for (int i = 0; i < 2 * numVelocityNodes; i++)
