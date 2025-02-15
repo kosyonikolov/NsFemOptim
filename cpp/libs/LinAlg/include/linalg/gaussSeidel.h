@@ -10,7 +10,7 @@ namespace linalg
                        const int maxIters, const double eps);
 
     template <typename F, VectorLike<F> A, VectorLike<F> B>
-    double gaussSeidel(const CsrMatrix<F> & m, A & x, const B & b, 
+    double gaussSeidel(const CsrMatrix<F> & m, A & x, const B & b,
                        const int maxIters, const double eps)
     {
         if (x.size() != m.cols)
@@ -25,6 +25,29 @@ namespace linalg
         }
         return gaussSeidel(m, x.data(), b.data(), maxIters, eps);
     }
+
+    // x and b are both matrices with two columns, in row-major order (interleaved channels)
+    template <typename F>
+    std::tuple<double, double> gaussSeidel2ch(const CsrMatrix<F> & m, F * x, const F * b,
+                                              const int maxIters, const double eps);
+
+    template <typename F, VectorLike<F> A, VectorLike<F> B>
+    std::tuple<double, double> gaussSeidel2ch(const CsrMatrix<F> & m, A & x, const B & b,
+                                              const int maxIters, const double eps)
+    {
+        if (x.size() != 2 * m.cols)
+        {
+            throw std::invalid_argument(std::format("{}: Bad size of x vector [{}] - expected {}",
+                                                    __FUNCTION__, x.size(), 2 * m.cols));
+        }
+        if (b.size() != 2 * m.rows)
+        {
+            throw std::invalid_argument(std::format("{}: Bad size of b vector [{}] - expected {}",
+                                                    __FUNCTION__, b.size(), 2 * m.rows));
+        }
+        return gaussSeidel2ch(m, x.data(), b.data(), maxIters, eps);
+    }
+
 } // namespace linalg
 
 #endif /* LIBS_LINALG_INCLUDE_LINALG_GAUSSSEIDEL */

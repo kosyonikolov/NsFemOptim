@@ -557,8 +557,9 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
     auto velocityMassCsr = linalg::csrFromEigen(velocityMass);
     Eigen::Matrix<SolType, Eigen::Dynamic, 2> accelRhs;
-    std::vector<float> tentRhsX(velocityMassCsr.rows), tentRhsY(velocityMassCsr.rows);
-    std::vector<float> tentAccX(velocityMassCsr.rows, 0), tentAccY(velocityMassCsr.rows, 0);
+    // Interleaved XY
+    std::vector<float> tentRhs(2 * velocityMassCsr.rows);
+    std::vector<float> tentAcc(2 * velocityMassCsr.rows);
 
     for (int iT = 0; iT <= numTimeSteps; iT++)
     {
@@ -591,12 +592,11 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         // Solve for the acceleration
         for (int i = 0; i < numVelocityNodes; i++)
         {
-            tentRhsX[i] = accelRhs(i, 0);
-            tentRhsY[i] = accelRhs(i, 1);
+            tentRhs[2 * i + 0] = accelRhs(i, 0);
+            tentRhs[2 * i + 1] = accelRhs(i, 1);
         }
         constexpr double eps = 1e-6;
-        linalg::gaussSeidel(velocityMassCsr, tentAccX, tentRhsX, 100, eps);
-        linalg::gaussSeidel(velocityMassCsr, tentAccY, tentRhsY, 100, eps);
+        linalg::gaussSeidel2ch(velocityMassCsr, tentAcc, tentRhs, 100, eps);
 
         // Update the velocity
         for (int i = 0; i < 2 * numVelocityNodes; i++)
@@ -607,8 +607,8 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         for (const int i : internalVelocityNodes)
         {
             // clang-format off
-            tentativeVelocityXy(i)                    -= tau * tentAccX[i];
-            tentativeVelocityXy(i + numVelocityNodes) -= tau * tentAccY[i];
+            tentativeVelocityXy(i)                    -= tau * tentAcc[2 * i + 0];
+            tentativeVelocityXy(i + numVelocityNodes) -= tau * tentAcc[2 * i + 1];
             // clang-format on
         }
         const auto tTentative = sw.millis(true);
