@@ -21,6 +21,7 @@
 #include <linalg/csrMatrix.h>
 #include <linalg/eigen.h>
 #include <linalg/gaussSeidel.h>
+#include <linalg/io.h>
 
 #include <utils/stopwatch.h>
 
@@ -556,6 +557,17 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     SpMat A;
 
     auto velocityMassCsr = linalg::csrFromEigen(velocityMass);
+
+    {
+        const std::string dumpFname = "csr.bin";
+        linalg::write(dumpFname, velocityMassCsr);
+        auto test = linalg::readCsr<SolType>(dumpFname);
+        if (test != velocityMassCsr)
+        {
+            std::cerr << "BAD CSR STORE!!!\n";
+        }
+    }
+
     Eigen::Matrix<SolType, Eigen::Dynamic, 2> accelRhs;
     // Interleaved XY
     std::vector<float> tentRhs(2 * velocityMassCsr.rows);
@@ -595,6 +607,17 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             tentRhs[2 * i + 0] = accelRhs(i, 0);
             tentRhs[2 * i + 1] = accelRhs(i, 1);
         }
+
+        {
+            std::string dumpFname = "vec.bin";
+            linalg::write(dumpFname, tentRhs);
+            auto test = linalg::readVec<SolType>(dumpFname);
+            if (test != tentRhs)
+            {
+                std::cerr << "BAD VECTOR STORE\n";
+            }
+        }
+
         constexpr double eps = 1e-6;
         linalg::gaussSeidel2ch(velocityMassCsr, tentAcc, tentRhs, 100, eps);
 

@@ -20,6 +20,10 @@ namespace linalg
         // size = rows + 1, last index is size(coeffs)
         std::vector<int> rowStart;
 
+        bool operator==(const CsrMatrix<F> & other) const;
+
+        bool operator!=(const CsrMatrix<F> & other) const;
+
         void rMult(const F * src, F * dst) const;
 
         // template <typename A, typename B>

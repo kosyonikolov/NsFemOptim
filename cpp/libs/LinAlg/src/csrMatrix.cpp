@@ -5,6 +5,43 @@
 namespace linalg
 {
     template <typename F>
+    bool CsrMatrix<F>::operator==(const CsrMatrix<F> & other) const
+    {
+        if (rows != other.rows)
+        {
+            return false;
+        }
+
+        if (cols != other.cols)
+        {
+            return false;
+        }
+
+        if (values != other.values)
+        {
+            return false;
+        }
+
+        if (colIdx != other.colIdx)
+        {
+            return false;
+        }
+
+        if (rowStart != other.rowStart)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    template <typename F>
+    bool CsrMatrix<F>::operator!=(const CsrMatrix<F> & other) const
+    {
+        return !operator==(other);
+    }
+
+    template <typename F>
     void CsrMatrix<F>::rMult(const F * src, F * dst) const
     {
         for (int i = 0; i < rows; i++)
@@ -38,6 +75,9 @@ namespace linalg
         }
         return std::sqrt(errSum / rows);
     }
+
+    template bool CsrMatrix<float>::operator!=(const CsrMatrix<float> & other) const;
+    template bool CsrMatrix<double>::operator!=(const CsrMatrix<double> & other) const;
 
     template void CsrMatrix<float>::rMult(const float * src, float * dst) const;
     template void CsrMatrix<double>::rMult(const double * src, double * dst) const;
