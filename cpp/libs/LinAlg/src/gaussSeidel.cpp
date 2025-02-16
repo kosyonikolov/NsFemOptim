@@ -125,6 +125,9 @@ namespace linalg
     template double gaussSeidel(const CsrMatrix<float> & m, float * x, const float * b, const int maxIters, const double eps);
     template double gaussSeidel(const CsrMatrix<double> & m, double * x, const double * b, const int maxIters, const double eps);
 
+    template void mse2ch(const CsrMatrix<float> & m, float * x, const float * b, double & mse0, double & mse1);
+    template void mse2ch(const CsrMatrix<double> & m, double * x, const double * b, double & mse0, double & mse1);
+
     template std::tuple<double, double> gaussSeidel2ch(const CsrMatrix<float> & m, float * x, const float * b,
                                                        const int maxIters, const double eps);
 

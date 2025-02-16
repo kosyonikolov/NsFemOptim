@@ -6,6 +6,7 @@
 #include <thread>
 
 #include <semaphore.h>
+// #include <sched.h>
 
 #include <linalg/csrMatrix.h>
 #include <linalg/graphs.h>
@@ -87,6 +88,17 @@ class ParallelGaussSeidel2ch
 
     void threadFunc(const int threadIdx)
     {
+        // Not significant improvement in median times
+        // Some improvement for max times
+        // cpu_set_t cpuSet;
+        // CPU_ZERO(&cpuSet);
+        // CPU_SET(2 * threadIdx, &cpuSet);
+        // if (sched_setaffinity(getpid(), sizeof(cpuSet), &cpuSet) == -1)
+        // {
+        //     const int err = errno;
+        //     std::cerr << "setaffinity failed: " << strerror(err) << "\n";
+        // }
+
         const int nRows = m.rows;
         const int numThreads = threads.size();
 
@@ -294,7 +306,7 @@ int main(int argc, char ** argv)
 
     const int maxIters = 100;
     const double eps = 1e-9;
-    const int nRuns = 20;
+    const int nRuns = 100;
     std::cout << "Serial times:\n";
     for (int i = 0; i < nRuns; i++)
     {
@@ -304,7 +316,7 @@ int main(int argc, char ** argv)
         std::cout << sw.millis() << " ms\n";
     }
 
-    const int nThreads = 4;
+    const int nThreads = 8;
     ParallelGaussSeidel2ch<float> solver(m, partition, nThreads);
 
     std::cout << "Parallel times:\n";
@@ -332,6 +344,14 @@ int main(int argc, char ** argv)
     const double mse = std::sqrt(sqSum / n);
     std::cout << "MSE: " << mse << "\n";
     std::cout << "Max delta: " << maxDelta << "\n";
+
+    double mseS0, mseS1;
+    double mseP0, mseP1;
+    linalg::mse2ch(m, xS.data(), b.data(), mseS0, mseS1);
+    linalg::mse2ch(m, xP.data(), b.data(), mseP0, mseP1);
+
+    std::cout << "SysMSE serial: " << mseS0 << ", " << mseS1 << "\n";
+    std::cout << "SysMSE parallel: " << mseP0 << ", " << mseP1 << "\n";
 
     return 0;
 }

@@ -26,6 +26,9 @@ namespace linalg
         return gaussSeidel(m, x.data(), b.data(), maxIters, eps);
     }
 
+    template <typename F>
+    void mse2ch(const CsrMatrix<F> & m, F * x, const F * b, double & mse0, double & mse1);
+
     // x and b are both matrices with two columns, in row-major order (interleaved channels)
     template <typename F>
     std::tuple<double, double> gaussSeidel2ch(const CsrMatrix<F> & m, F * x, const F * b,
