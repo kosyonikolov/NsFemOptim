@@ -47,7 +47,7 @@ struct FastConvection
         const int elSize = velocityMesh.getElementSize();
 
         convection = SpMat(nNodes, nNodes);
-        
+
         // Assemble convection with fake data to create the sparse pattern
         std::vector<int> ids(elSize);
         std::vector<Triplet> fakeTriplets;
@@ -557,16 +557,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     SpMat A;
 
     auto velocityMassCsr = linalg::csrFromEigen(velocityMass);
-
-    {
-        const std::string dumpFname = "csr.bin";
-        linalg::write(dumpFname, velocityMassCsr);
-        auto test = linalg::readCsr<SolType>(dumpFname);
-        if (test != velocityMassCsr)
-        {
-            std::cerr << "BAD CSR STORE!!!\n";
-        }
-    }
+    // linalg::write("dump/velocityMass.bin", velocityMassCsr);
 
     Eigen::Matrix<SolType, Eigen::Dynamic, 2> accelRhs;
     // Interleaved XY
@@ -608,15 +599,11 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             tentRhs[2 * i + 1] = accelRhs(i, 1);
         }
 
-        {
-            std::string dumpFname = "vec.bin";
-            linalg::write(dumpFname, tentRhs);
-            auto test = linalg::readVec<SolType>(dumpFname);
-            if (test != tentRhs)
-            {
-                std::cerr << "BAD VECTOR STORE\n";
-            }
-        }
+        // if (iT % 100 == 0)
+        // {
+        //     linalg::write(std::format("dump/tent_x_{}.bin", iT), tentAcc);
+        //     linalg::write(std::format("dump/tent_b_{}.bin", iT), tentRhs);
+        // }
 
         constexpr double eps = 1e-6;
         linalg::gaussSeidel2ch(velocityMassCsr, tentAcc, tentRhs, 100, eps);
