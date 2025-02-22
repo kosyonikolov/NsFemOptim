@@ -186,6 +186,43 @@ public:
     }
 };
 
+void testMemorySpeed()
+{
+    const int n = 1 << 30;
+    std::vector<int> src(n);
+    std::vector<int> dst(n);
+    for (int i = 0; i < n; i++)
+    {
+        src[i] = i * i;
+    }
+
+    const auto timeToSpeedGbs = [&](const float ms)
+    {
+        const float s = ms / 1000.0f;
+        return n * sizeof(int) / (s * 1e9);
+    };
+
+    const int nRuns = 10;
+    double sum = 0;
+    for (int i = 0; i < nRuns; i++)
+    {
+        u::Stopwatch sw;
+        std::copy_n(src.data(), n, dst.data());
+        const auto t = sw.millis();
+        sum += t;
+        std::cout << t << " ms (" << timeToSpeedGbs(t) << " GB/s)\n";
+    }
+    const float avg = sum / nRuns;
+    std::cout << "Average: " << avg << " ms (" << timeToSpeedGbs(avg) << " GB/s)\n";
+
+    int test = 0;
+    for (int i = 0; i < n; i++)
+    {
+        test += dst[i];
+    }
+    std::cout << "Test val = " << test << "\n";
+}
+
 int main(int argc, char ** argv)
 {
     const std::string usageMsg = "./SpmvTest <csr matrix>";
@@ -194,6 +231,8 @@ int main(int argc, char ** argv)
         std::cerr << usageMsg << "\n";
         return 1;
     }
+
+    testMemorySpeed();
 
     const std::string matrixFname = argv[1];
 
