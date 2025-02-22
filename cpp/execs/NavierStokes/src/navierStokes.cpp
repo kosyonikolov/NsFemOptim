@@ -316,7 +316,8 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     const int numPressureNodes = pressureMesh.nodes.size();
 
     // ======================================== Collect Dirichlet nodes ========================================
-
+    std::cout << "Collecting Dirichlet nodes... ";
+    std::cout.flush();
     auto dirichletZero = [](const mesh::ConcreteMesh &, const int, const int) -> float
     {
         return 0.0f;
@@ -348,9 +349,12 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     const auto dirichletPressure = extractDirichletNodes(pressureMesh, pressureBorderIds, dirichletZero);
     const auto internalPressureNodes = extractInternalNodes(numPressureNodes, dirichletPressure);
     const int numInternalPressureNodes = internalPressureNodes.size();
+    std::cout << "Done\n";
     // =========================================================================================================
 
     // =========================================== Assemble matrices ===========================================
+    std::cout << "Assembling matrices... ";
+    std::cout.flush();
     std::vector<Triplet> velocityMassT, velocityStiffnessT;
     std::vector<Triplet> pressureStiffnessT, pressureStiffnessInternalT;
 
@@ -470,7 +474,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
     build(velocityPressureDiv, velocityPressureDivT);
     build(pressureVelocityDiv, pressureVelocityDivT);
-
+    std::cout << "Done... ";
     // =========================================================================================================
 
     const float viscosity = cond.viscosity;
@@ -493,7 +497,9 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
     imposeDirichletVelocity();
 
+    std::cout << "Setting up FastConvection... ";
     FastConvection fastConvection(velocityMesh, velocityIntegrator);
+    std::cout << "Done\n";
 
     const int numTimeSteps = std::ceil(maxT / timeStep0);
     const float tau = maxT / numTimeSteps;
@@ -564,6 +570,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     std::vector<float> tentRhs(2 * velocityMassCsr.rows);
     std::vector<float> tentAcc(2 * velocityMassCsr.rows);
 
+    std::cout << "Solving...\n";
     for (int iT = 0; iT <= numTimeSteps; iT++)
     {
         u::Stopwatch bigSw;
@@ -752,15 +759,22 @@ int main(int argc, char ** argv)
     const std::string outputDir = argv[3];
 
     auto cfg = parseNsConfig(cfgFname);
+
+    std::cout << "Parsing mesh... ";
+    std::cout.flush();
     auto triMesh = mesh::parseTriangleGmsh(meshFileName);
+    std::cout << "Done\n";
 
     const auto velocityElement = el::createElement(el::Type::P2);
     const auto pressureElement = el::createElement(el::Type::P1);
 
+    std::cout << "Creating pressure and velocity meshes... ";
+    std::cout.flush();
     auto velocityMesh = mesh::createMesh(triMesh, *velocityElement);
     auto pressureMesh = mesh::createMesh(triMesh, *pressureElement);
+    std::cout << "Done\n";
 
-    if (true)
+    if (false)
     {
         const float scale = 3500;
         cv::imwrite("velocity_mesh.png", mesh::drawMesh(velocityMesh, scale));
