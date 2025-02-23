@@ -103,7 +103,7 @@ class ParallelSpmv
                     F sum = 0;
                     for (int j = m.rowStart[i]; j < j1; j++)
                     {
-                        const int col = m.colIdx[j];
+                        const int col = m.column[j];
                         sum += m.values[j] * v[col];
                     }
                     result[i] = sum;

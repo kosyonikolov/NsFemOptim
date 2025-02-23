@@ -38,6 +38,10 @@ namespace linalg
         const std::vector<std::vector<ColPair>> & getRows() const;
 
         CsrMatrix<F> buildCsr();
+
+        int numRows() const;
+
+        int numCols() const;
     };
 } // namespace linalg
 

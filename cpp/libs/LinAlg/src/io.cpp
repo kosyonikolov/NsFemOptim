@@ -54,10 +54,10 @@ namespace linalg
             throw std::invalid_argument(std::format("{}: Bad size of rowStart [{}] - expected {}",
                                                     __FUNCTION__, m.rowStart.size(), m.rows + 1));
         }
-        if (m.values.size() != m.colIdx.size())
+        if (m.values.size() != m.column.size())
         {
             throw std::invalid_argument(std::format("{}: Bad size of colIdx [{}] - expected {}",
-                                                    __FUNCTION__, m.colIdx.size(), m.values.size()));
+                                                    __FUNCTION__, m.column.size(), m.values.size()));
         }
 
         const int id = dtypeId<F>();
@@ -68,7 +68,7 @@ namespace linalg
         const int nnz = m.values.size();
         writeVal(stream, nnz);
         writeVec(stream, m.values);
-        writeVec(stream, m.colIdx);
+        writeVec(stream, m.column);
         writeVec(stream, m.rowStart);
     }
 
@@ -106,7 +106,7 @@ namespace linalg
         CsrMatrix<F> result;
         result.rows = rows;
         result.cols = cols;
-        if (!readVec(stream, result.values, nnz) || !readVec(stream, result.colIdx, nnz) || !readVec(stream, result.rowStart, rows + 1))
+        if (!readVec(stream, result.values, nnz) || !readVec(stream, result.column, nnz) || !readVec(stream, result.rowStart, rows + 1))
         {
             throw std::runtime_error("Failed to read CSR matrix: Couldn't read data vectors");
         }

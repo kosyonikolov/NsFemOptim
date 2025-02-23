@@ -25,6 +25,8 @@
 
 #include <utils/stopwatch.h>
 
+#include <fem/chorinMatrices.h>
+
 #include <NavierStokes/dfgCondtions.h>
 #include <NavierStokes/nsConfig.h>
 

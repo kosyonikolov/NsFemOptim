@@ -127,7 +127,7 @@ class ParallelGaussSeidel2ch
                     double negSum1 = 0;
                     for (int j = m.rowStart[i]; j < j1; j++)
                     {
-                        const int col = m.colIdx[j];
+                        const int col = m.column[j];
                         if (col == i)
                         {
                             diag = m.values[j];
@@ -153,7 +153,7 @@ class ParallelGaussSeidel2ch
                     std::array<F, 2> sum = {0, 0};
                     for (int j = m.rowStart[i]; j < j1; j++)
                     {
-                        const int col = m.colIdx[j];
+                        const int col = m.column[j];
                         sum[0] += m.values[j] * x[2 * col + 0];
                         sum[1] += m.values[j] * x[2 * col + 1];
                     }

@@ -101,7 +101,7 @@ namespace linalg
             const int j1 = m.rowStart[r + 1];
             for (int j = m.rowStart[r]; j < j1; j++)
             {
-                const int c = m.colIdx[j];
+                const int c = m.column[j];
                 if (r != c)
                 {
                     graph[r].push_back(c);

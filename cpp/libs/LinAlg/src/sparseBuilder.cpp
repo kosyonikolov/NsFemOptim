@@ -101,7 +101,7 @@ namespace linalg
         result.rows = rows;
         result.cols = cols;
         result.values.resize(nnz);
-        result.colIdx.resize(nnz);
+        result.column.resize(nnz);
         result.rowStart.resize(rows + 1);
 
         int j = 0; // Index in values/colIdx
@@ -112,7 +112,7 @@ namespace linalg
             for (int k = 0; k < row.size(); k++, j++)
             {
                 result.values[j] = row[k].value;
-                result.colIdx[j] = row[k].col;
+                result.column[j] = row[k].col;
             }
         }
         result.rowStart.back() = nnz;
@@ -120,9 +120,23 @@ namespace linalg
         return result;
     }
 
+    template<typename F>
+    int SparseMatrixBuilder<F>::numRows() const
+    {
+        return rows;
+    }
+
+    template<typename F>
+    int SparseMatrixBuilder<F>::numCols() const
+    {
+        return cols;
+    }
+
     template SparseMatrixBuilder<float>::SparseMatrixBuilder(const int rows, const int cols);
     template void SparseMatrixBuilder<float>::add(const int row, const int col, float value);
     template void SparseMatrixBuilder<float>::compressRows();
     template const std::vector<std::vector<typename SparseMatrixBuilder<float>::ColPair>> & SparseMatrixBuilder<float>::getRows() const;
     template CsrMatrix<float> SparseMatrixBuilder<float>::buildCsr();
+    template int SparseMatrixBuilder<float>::numRows() const;
+    template int SparseMatrixBuilder<float>::numCols() const;
 }

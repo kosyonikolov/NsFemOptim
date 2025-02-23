@@ -4,6 +4,7 @@
 #include <format>
 #include <stdexcept>
 #include <vector>
+#include <span>
 
 #include <linalg/concepts.h>
 
@@ -16,9 +17,17 @@ namespace linalg
 
         // Same size (num maybe-nonzero elems)
         std::vector<F> values;
-        std::vector<int> colIdx;
+        std::vector<int> column;
         // size = rows + 1, last index is size(coeffs)
         std::vector<int> rowStart;
+
+        CsrMatrix<F> slice(std::span<const int> & rowIds, std::span<int> & colIds) const;
+
+        template <VectorLike<int> A, VectorLike<int> B>
+        CsrMatrix<F> slice(const A & rowIds, const B & colIds)
+        {
+            return slice(std::span<const int>(rowIds.data(), rowIds.size()), std::span<const int>(colIds.data(), colIds.size()));
+        }
 
         bool operator==(const CsrMatrix<F> & other) const;
 
