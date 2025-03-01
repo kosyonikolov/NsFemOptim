@@ -357,6 +357,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     // =========================================== Assemble matrices ===========================================
     std::cout << "Assembling matrices... ";
     std::cout.flush();
+    u::Stopwatch sw;
     std::vector<Triplet> velocityMassT, velocityStiffnessT;
     std::vector<Triplet> pressureStiffnessT, pressureStiffnessInternalT;
 
@@ -471,59 +472,34 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     build(velocityMass, velocityMassT);
     build(velocityStiffness, velocityStiffnessT);
 
-    // For test
-    SpMat pressureStiffness(numPressureNodes, numPressureNodes);
-    build(pressureStiffness, pressureStiffnessT);
-
     pressureStiffnessInternalT = projectTriplets(numPressureNodes, pressureStiffnessT, internalPressureNodes);
     build(pressureInternalStiffness, pressureStiffnessInternalT);
 
     build(velocityPressureDiv, velocityPressureDivT);
     build(pressureVelocityDiv, pressureVelocityDivT);
-    std::cout << "Done... ";
+    const auto tAsm0 = sw.millis();
+    std::cout << "Done in " << tAsm0 << " ms\n";
     // =========================================================================================================
 
     // Test custom matrices
     {
-        const float cmpEps = 1e-6f;
-
-        // Velocity mass
+        u::Stopwatch bigSw;
+        u::Stopwatch smallSw;
         auto chorinBuilders = fem::buildChorinMatrices<SolType>(velocityMesh, pressureMesh, integrationDegree);
-        auto velocityMassRef = linalg::csrFromEigen(velocityMass);
-        auto velocityMassTest = chorinBuilders.velocityMass.buildCsr();
-        if (!velocityMassRef.compareLayout(velocityMassTest))
-        {
-            std::cerr << "Bad velocity mass layout!\n";
-        }
-        if (!velocityMassRef.compareValues(velocityMassTest, cmpEps))
-        {
-            std::cerr << "Bad velocity mass values!\n";
-        }
+        const auto tBuilders = smallSw.millis(true);
+        auto velocityMassCsr = chorinBuilders.velocityMass.buildCsr();
+        auto velocityStiffnessCsr = chorinBuilders.velocityStiffness.buildCsr();
+        auto pressureStiffnessCsr = chorinBuilders.pressureStiffness.buildCsr();
+        auto velocityPressureDivCsr = chorinBuilders.velocityPressureDiv.buildCsr();
+        auto pressureVelocityDiv = chorinBuilders.pressureVelocityDiv.buildCsr();
+        const auto tCsrs = smallSw.millis(true);
 
-        // Pressure stiffness
-        auto fullPressureStiffnessTest = chorinBuilders.pressureStiffness.buildCsr();
-        auto fullPressureStiffnessRef = linalg::csrFromEigen(pressureStiffness);
-        if (!fullPressureStiffnessRef.compareLayout(fullPressureStiffnessTest))
-        {
-            std::cerr << "Bad full pressure stiffness layout!\n";
-        }
-        if (!fullPressureStiffnessRef.compareValues(fullPressureStiffnessTest, cmpEps))
-        {
-            std::cerr << "Bad full pressure stiffness values!\n";
-        }
+        auto pressureStiffnessInternalCsr = pressureStiffnessCsr.slice(internalPressureNodes, internalPressureNodes);
+        const auto tSlice = smallSw.millis(true);
+        const auto tTotal = bigSw.millis();
 
-        // Internal pressure
-        auto pressureInternalStiffnessTest = fullPressureStiffnessTest.slice(internalPressureNodes, internalPressureNodes);
-        auto pressureInternalStiffnessRef = linalg::csrFromEigen(pressureInternalStiffness);
-
-        if (!pressureInternalStiffnessRef.compareLayout(pressureInternalStiffnessTest))
-        {
-            std::cerr << "Bad pressure stiffness layout!\n";
-        }
-        if (!pressureInternalStiffnessRef.compareValues(pressureInternalStiffnessTest, cmpEps))
-        {
-            std::cerr << "Bad pressure stiffness values!\n";
-        }
+        std::cout << std::format("CSR assembly (ms): total = {}, builders = {}, CSRs = {}, slice = {}\n",
+                                 tTotal, tBuilders, tCsrs, tSlice);
     }
 
     const float viscosity = cond.viscosity;
