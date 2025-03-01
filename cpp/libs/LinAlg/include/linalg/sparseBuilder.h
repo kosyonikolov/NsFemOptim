@@ -25,7 +25,7 @@ namespace linalg
         std::vector<std::vector<ColPair>> rowPairs;
 
     public:
-        SparseMatrixBuilder();
+        SparseMatrixBuilder() = default;
 
         SparseMatrixBuilder(const int rows, const int cols);
 

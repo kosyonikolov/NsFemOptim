@@ -133,6 +133,7 @@ namespace linalg
     }
 
     template SparseMatrixBuilder<float>::SparseMatrixBuilder(const int rows, const int cols);
+    template void SparseMatrixBuilder<float>::resize(const int newRows, const int newCols);
     template void SparseMatrixBuilder<float>::add(const int row, const int col, float value);
     template void SparseMatrixBuilder<float>::compressRows();
     template const std::vector<std::vector<typename SparseMatrixBuilder<float>::ColPair>> & SparseMatrixBuilder<float>::getRows() const;

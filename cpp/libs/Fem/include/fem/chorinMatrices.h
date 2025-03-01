@@ -1,5 +1,5 @@
-#ifndef LIBS_FEM_INCLUDE_FEM_CHORIN
-#define LIBS_FEM_INCLUDE_FEM_CHORIN
+#ifndef LIBS_FEM_INCLUDE_FEM_CHORINMATRICES
+#define LIBS_FEM_INCLUDE_FEM_CHORINMATRICES
 
 #include <linalg/sparseBuilder.h>
 
@@ -22,4 +22,4 @@ namespace fem
                                           const int integrationDegree);
 };  
 
-#endif /* LIBS_FEM_INCLUDE_FEM_CHORIN */
+#endif /* LIBS_FEM_INCLUDE_FEM_CHORINMATRICES */

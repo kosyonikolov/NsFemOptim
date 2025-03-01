@@ -21,13 +21,17 @@ namespace linalg
         // size = rows + 1, last index is size(coeffs)
         std::vector<int> rowStart;
 
-        CsrMatrix<F> slice(std::span<const int> & rowIds, std::span<int> & colIds) const;
+        CsrMatrix<F> slice(std::span<const int> rowIds, std::span<const int> colIds) const;
 
         template <VectorLike<int> A, VectorLike<int> B>
         CsrMatrix<F> slice(const A & rowIds, const B & colIds)
         {
             return slice(std::span<const int>(rowIds.data(), rowIds.size()), std::span<const int>(colIds.data(), colIds.size()));
         }
+
+        bool compareLayout(const CsrMatrix<F> & other) const;
+
+        bool compareValues(const CsrMatrix<F> & other, const F epsilon) const;
 
         bool operator==(const CsrMatrix<F> & other) const;
 

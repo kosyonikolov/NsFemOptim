@@ -1,14 +1,14 @@
 #include <linalg/csrMatrix.h>
 
-#include <cmath>
-#include <stdexcept>
-#include <format>
 #include <algorithm>
+#include <cmath>
+#include <format>
+#include <stdexcept>
 
 namespace linalg
 {
-    template<typename F>
-    CsrMatrix<F> CsrMatrix<F>::slice(std::span<const int> & rowIds, std::span<int> & colIds) const
+    template <typename F>
+    CsrMatrix<F> CsrMatrix<F>::slice(std::span<const int> rowIds, std::span<const int> colIds) const
     {
         if (rowIds.empty() || colIds.empty())
         {
@@ -29,7 +29,7 @@ namespace linalg
 
         // dstId = colMap[srcId]
         // -1 = not used
-        std::vector<int> colMap(cols, -1); 
+        std::vector<int> colMap(cols, -1);
         for (int i = 0; i < colIds.size(); i++)
         {
             const int j = colIds[i];
@@ -56,8 +56,8 @@ namespace linalg
         CsrMatrix<F> result;
         result.rows = nNewRows;
         result.cols = nNewCols;
-        result.rowStart.resize(nNewRows);
-        
+        result.rowStart.resize(nNewRows + 1);
+
         for (int i = 0; i < nNewRows; i++)
         {
             result.rowStart[i] = result.values.size();
@@ -84,11 +84,13 @@ namespace linalg
             }
         }
 
+        result.rowStart.back() = result.values.size();
+
         return result;
     }
 
     template <typename F>
-    bool CsrMatrix<F>::operator==(const CsrMatrix<F> & other) const
+    bool CsrMatrix<F>::compareLayout(const CsrMatrix<F> & other) const
     {
         if (rows != other.rows)
         {
@@ -100,7 +102,7 @@ namespace linalg
             return false;
         }
 
-        if (values != other.values)
+        if (rowStart != other.rowStart)
         {
             return false;
         }
@@ -110,7 +112,39 @@ namespace linalg
             return false;
         }
 
-        if (rowStart != other.rowStart)
+        return true;
+    }
+
+    template <typename F>
+    bool CsrMatrix<F>::compareValues(const CsrMatrix<F> & other, const F epsilon) const
+    {
+        if (values.size() != other.values.size())
+        {
+            return false;
+        }
+
+        const size_t n = values.size();
+        for (size_t i = 0; i < n; i++)
+        {
+            const F delta = values[i] - other.values[i];
+            if (std::abs(delta) > epsilon)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    template <typename F>
+    bool CsrMatrix<F>::operator==(const CsrMatrix<F> & other) const
+    {
+        if (!compareLayout(other))
+        {
+            return false;
+        }
+
+        if (!compareValues(other, 0))
         {
             return false;
         }
@@ -159,7 +193,13 @@ namespace linalg
         return std::sqrt(errSum / rows);
     }
 
-    template CsrMatrix<float> CsrMatrix<float>::slice(std::span<const int> & rowIds, std::span<int> & colIds) const;
+    template CsrMatrix<float> CsrMatrix<float>::slice(std::span<const int> rowIds, std::span<const int> colIds) const;
+
+    template bool CsrMatrix<float>::compareLayout(const CsrMatrix<float> & other) const;
+    template bool CsrMatrix<double>::compareLayout(const CsrMatrix<double> & other) const;
+
+    template bool CsrMatrix<float>::compareValues(const CsrMatrix<float> & other, const float epsilon) const;
+    template bool CsrMatrix<double>::compareValues(const CsrMatrix<double> & other, const double epsilon) const;
 
     template bool CsrMatrix<float>::operator!=(const CsrMatrix<float> & other) const;
     template bool CsrMatrix<double>::operator!=(const CsrMatrix<double> & other) const;

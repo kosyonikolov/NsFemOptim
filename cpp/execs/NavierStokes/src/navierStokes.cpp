@@ -471,6 +471,10 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     build(velocityMass, velocityMassT);
     build(velocityStiffness, velocityStiffnessT);
 
+    // For test
+    SpMat pressureStiffness(numPressureNodes, numPressureNodes);
+    build(pressureStiffness, pressureStiffnessT);
+
     pressureStiffnessInternalT = projectTriplets(numPressureNodes, pressureStiffnessT, internalPressureNodes);
     build(pressureInternalStiffness, pressureStiffnessInternalT);
 
@@ -478,6 +482,49 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     build(pressureVelocityDiv, pressureVelocityDivT);
     std::cout << "Done... ";
     // =========================================================================================================
+
+    // Test custom matrices
+    {
+        const float cmpEps = 1e-6f;
+
+        // Velocity mass
+        auto chorinBuilders = fem::buildChorinMatrices<SolType>(velocityMesh, pressureMesh, integrationDegree);
+        auto velocityMassRef = linalg::csrFromEigen(velocityMass);
+        auto velocityMassTest = chorinBuilders.velocityMass.buildCsr();
+        if (!velocityMassRef.compareLayout(velocityMassTest))
+        {
+            std::cerr << "Bad velocity mass layout!\n";
+        }
+        if (!velocityMassRef.compareValues(velocityMassTest, cmpEps))
+        {
+            std::cerr << "Bad velocity mass values!\n";
+        }
+
+        // Pressure stiffness
+        auto fullPressureStiffnessTest = chorinBuilders.pressureStiffness.buildCsr();
+        auto fullPressureStiffnessRef = linalg::csrFromEigen(pressureStiffness);
+        if (!fullPressureStiffnessRef.compareLayout(fullPressureStiffnessTest))
+        {
+            std::cerr << "Bad full pressure stiffness layout!\n";
+        }
+        if (!fullPressureStiffnessRef.compareValues(fullPressureStiffnessTest, cmpEps))
+        {
+            std::cerr << "Bad full pressure stiffness values!\n";
+        }
+
+        // Internal pressure
+        auto pressureInternalStiffnessTest = fullPressureStiffnessTest.slice(internalPressureNodes, internalPressureNodes);
+        auto pressureInternalStiffnessRef = linalg::csrFromEigen(pressureInternalStiffness);
+
+        if (!pressureInternalStiffnessRef.compareLayout(pressureInternalStiffnessTest))
+        {
+            std::cerr << "Bad pressure stiffness layout!\n";
+        }
+        if (!pressureInternalStiffnessRef.compareValues(pressureInternalStiffnessTest, cmpEps))
+        {
+            std::cerr << "Bad pressure stiffness values!\n";
+        }
+    }
 
     const float viscosity = cond.viscosity;
 
