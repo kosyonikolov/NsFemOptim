@@ -357,150 +357,37 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     // =========================================== Assemble matrices ===========================================
     std::cout << "Assembling matrices... ";
     std::cout.flush();
-    u::Stopwatch sw;
-    std::vector<Triplet> velocityMassT, velocityStiffnessT;
-    std::vector<Triplet> pressureStiffnessT, pressureStiffnessInternalT;
-
-    // X on top, Y on bottom
-    std::vector<Triplet> velocityPressureDivT;
-    std::vector<Triplet> pressureVelocityDivT;
-
-    SpMat velocityMass(numVelocityNodes, numVelocityNodes);
-    SpMat velocityStiffness(numVelocityNodes, numVelocityNodes);
-    SpMat pressureInternalStiffness(numInternalPressureNodes, numInternalPressureNodes);
-    SpMat velocityPressureDiv(numPressureNodes, 2 * numVelocityNodes);
-    SpMat pressureVelocityDiv(2 * numVelocityNodes, numPressureNodes);
 
     const int integrationDegree = 4;
     el::TriangleIntegrator velocityIntegrator(velocityMesh.baseElement, integrationDegree, pressureMesh.baseElement);
-    el::TriangleIntegrator pressureIntegrator(pressureMesh.baseElement, integrationDegree);
 
-    const int elSizeV = velocityMesh.getElementSize();
-    const int elSizeP = pressureMesh.getElementSize();
+    u::Stopwatch bigSw;
+    u::Stopwatch smallSw;
+    auto chorinBuilders = fem::buildChorinMatrices<SolType>(velocityMesh, pressureMesh, integrationDegree);
+    const auto tBuilders = smallSw.millis(true);
+    auto velocityMassCsr = chorinBuilders.velocityMass.buildCsr();
+    auto velocityStiffnessCsr = chorinBuilders.velocityStiffness.buildCsr();
+    auto pressureStiffnessCsr = chorinBuilders.pressureStiffness.buildCsr();
+    auto velocityPressureDivCsr = chorinBuilders.velocityPressureDiv.buildCsr();
+    auto pressureVelocityDivCsr = chorinBuilders.pressureVelocityDiv.buildCsr();
+    const auto tCsrs = smallSw.millis(true);
 
-    std::vector<int> idsV(elSizeV);
-    std::vector<el::Point> ptsV(elSizeV);
-    cv::Mat localMassMatrixV, localStiffnessMatrixV;
+    auto pressureStiffnessInternalCsr = pressureStiffnessCsr.slice(internalPressureNodes, internalPressureNodes);
+    const auto tSlice = smallSw.millis(true);
 
-    std::vector<int> idsP(elSizeP);
-    std::vector<el::Point> ptsP(elSizeP);
-    cv::Mat localMassMatrixP, localStiffnessMatrixP;
+    // Convert to Eigen
+    auto velocityMass = linalg::eigenFromCsr(velocityMassCsr);
+    auto velocityStiffness = linalg::eigenFromCsr(velocityStiffnessCsr);
+    auto pressureInternalStiffness = linalg::eigenFromCsr(pressureStiffnessInternalCsr);
+    auto velocityPressureDiv = linalg::eigenFromCsr(velocityPressureDivCsr);
+    auto pressureVelocityDiv = linalg::eigenFromCsr(pressureVelocityDivCsr);
+    const auto tCvtEigen = smallSw.millis();
+    const auto tTotal = bigSw.millis();
 
-    cv::Mat localVpdX, localVpdY, localPvdX, localPvdY;
+    std::cout << std::format("CSR assembly (ms): total = {}, builders = {}, CSRs = {}, slice = {}, cvtEigen = {}\n",
+                             tTotal, tBuilders, tCsrs, tSlice, tCvtEigen);
 
-    const int nElem = velocityMesh.numElements;
-    for (int i = 0; i < nElem; i++)
-    {
-        const auto t = velocityMesh.elementTransforms[i];
-
-        // ========================= Velocity-only matrices =========================
-        velocityMesh.getElement(i, idsV.data(), ptsV.data());
-
-        velocityIntegrator.integrateLocalMassMatrix(t, localMassMatrixV);
-        assert(elSizeV == localMassMatrixV.cols);
-        assert(elSizeV == localMassMatrixV.rows);
-
-        velocityIntegrator.integrateLocalStiffnessMatrix(t, localStiffnessMatrixV);
-        assert(elSizeV == localStiffnessMatrixV.cols);
-        assert(elSizeV == localStiffnessMatrixV.rows);
-
-        // Accumulate
-        for (int r = 0; r < elSizeV; r++)
-        {
-            const int i = idsV[r];
-            for (int c = 0; c < elSizeV; c++)
-            {
-                const int j = idsV[c];
-                const Triplet tripletM(i, j, localMassMatrixV.at<float>(r, c));
-                const Triplet tripletS(i, j, localStiffnessMatrixV.at<float>(r, c));
-                velocityMassT.push_back(tripletM);
-                velocityStiffnessT.push_back(tripletS);
-            }
-        }
-
-        // ========================= Pressure-only matrices =========================
-        pressureMesh.getElement(i, idsP.data(), ptsP.data());
-
-        pressureIntegrator.integrateLocalStiffnessMatrix(t, localStiffnessMatrixP);
-        assert(elSizeP == localStiffnessMatrixP.cols);
-        assert(elSizeP == localStiffnessMatrixP.rows);
-
-        // Accumulate
-        for (int r = 0; r < elSizeP; r++)
-        {
-            const int i = idsP[r];
-            for (int c = 0; c < elSizeP; c++)
-            {
-                const int j = idsP[c];
-                const Triplet tripletS(i, j, localStiffnessMatrixP.at<float>(r, c));
-                pressureStiffnessT.push_back(tripletS);
-            }
-        }
-
-        // ========================= Divergence matrices =========================
-        velocityIntegrator.integrateLocalDivergenceMatrix(t, false, localVpdX, localVpdY);
-        assert(localVpdX.cols == localVpdY.cols && localVpdX.rows == localVpdY.rows);
-        assert(localVpdX.rows == elSizeP);
-        assert(localVpdX.cols == elSizeV);
-
-        velocityIntegrator.integrateLocalDivergenceMatrix(t, true, localPvdX, localPvdY);
-        assert(localPvdX.cols == localPvdY.cols && localPvdX.rows == localPvdY.rows);
-        assert(localPvdX.rows == elSizeV);
-        assert(localPvdX.cols == elSizeP);
-
-        for (int iV = 0; iV < elSizeV; iV++)
-        {
-            const int gV = idsV[iV];
-            for (int iP = 0; iP < elSizeP; iP++)
-            {
-                const int gP = idsP[iP];
-                // clang-format off
-                velocityPressureDivT.emplace_back(gP, gV,                    localVpdX.at<float>(iP, iV));
-                velocityPressureDivT.emplace_back(gP, gV + numVelocityNodes, localVpdY.at<float>(iP, iV));
-                pressureVelocityDivT.emplace_back(gV, gP,                    localPvdX.at<float>(iV, iP));
-                pressureVelocityDivT.emplace_back(gV + numVelocityNodes, gP, localPvdY.at<float>(iV, iP));
-                // clang-format on
-            }
-        }
-    }
-
-    auto build = [](SpMat & m, std::vector<Triplet> & t)
-    {
-        m.setFromTriplets(t.begin(), t.end());
-    };
-
-    build(velocityMass, velocityMassT);
-    build(velocityStiffness, velocityStiffnessT);
-
-    pressureStiffnessInternalT = projectTriplets(numPressureNodes, pressureStiffnessT, internalPressureNodes);
-    build(pressureInternalStiffness, pressureStiffnessInternalT);
-
-    build(velocityPressureDiv, velocityPressureDivT);
-    build(pressureVelocityDiv, pressureVelocityDivT);
-    const auto tAsm0 = sw.millis();
-    std::cout << "Done in " << tAsm0 << " ms\n";
     // =========================================================================================================
-
-    // Test custom matrices
-    {
-        u::Stopwatch bigSw;
-        u::Stopwatch smallSw;
-        auto chorinBuilders = fem::buildChorinMatrices<SolType>(velocityMesh, pressureMesh, integrationDegree);
-        const auto tBuilders = smallSw.millis(true);
-        auto velocityMassCsr = chorinBuilders.velocityMass.buildCsr();
-        auto velocityStiffnessCsr = chorinBuilders.velocityStiffness.buildCsr();
-        auto pressureStiffnessCsr = chorinBuilders.pressureStiffness.buildCsr();
-        auto velocityPressureDivCsr = chorinBuilders.velocityPressureDiv.buildCsr();
-        auto pressureVelocityDiv = chorinBuilders.pressureVelocityDiv.buildCsr();
-        const auto tCsrs = smallSw.millis(true);
-
-        auto pressureStiffnessInternalCsr = pressureStiffnessCsr.slice(internalPressureNodes, internalPressureNodes);
-        const auto tSlice = smallSw.millis(true);
-        const auto tTotal = bigSw.millis();
-
-        std::cout << std::format("CSR assembly (ms): total = {}, builders = {}, CSRs = {}, slice = {}\n",
-                                 tTotal, tBuilders, tCsrs, tSlice);
-    }
 
     const float viscosity = cond.viscosity;
 
@@ -587,7 +474,6 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     SpMat A0 = viscosity * velocityStiffness;
     SpMat A;
 
-    auto velocityMassCsr = linalg::csrFromEigen(velocityMass);
     // linalg::write("dump/velocityMass.bin", velocityMassCsr);
 
     Eigen::Matrix<SolType, Eigen::Dynamic, 2> accelRhs;

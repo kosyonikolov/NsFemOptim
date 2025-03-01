@@ -40,7 +40,28 @@ namespace linalg
     template <typename F>
     Eigen::SparseMatrix<F, Eigen::RowMajor> eigenFromCsr(const CsrMatrix<F> & m)
     {
-        // TODO
+        // Create an Eigen SparseMatrix with the same dimensions as the CSR matrix
+        Eigen::SparseMatrix<F, Eigen::RowMajor> eigenMatrix(m.rows, m.cols);
+
+        // Reserve space for the non-zero elements
+        eigenMatrix.reserve(m.values.size());
+
+        // Iterate over each row
+        for (int i = 0; i < m.rows; ++i)
+        {
+            const int j1 = m.rowStart[i + 1];
+
+            // Insert the non-zero elements of the current row into the Eigen matrix
+            for (int j = m.rowStart[i]; j < j1; j++)
+            {
+                eigenMatrix.insert(i, m.column[j]) = m.values[j];
+            }
+        }
+
+        // Finalize the Eigen matrix (compress it)
+        eigenMatrix.makeCompressed();
+
+        return eigenMatrix;
     }
 
     template <typename F>
@@ -67,4 +88,6 @@ namespace linalg
 
     template CsrMatrix<float> csrFromEigen(const Eigen::SparseMatrix<float, Eigen::RowMajor> & m);
     template CsrMatrix<double> csrFromEigen(const Eigen::SparseMatrix<double, Eigen::RowMajor> & m);
+
+    template Eigen::SparseMatrix<float, Eigen::RowMajor> eigenFromCsr(const CsrMatrix<float> & m);
 } // namespace linalg
