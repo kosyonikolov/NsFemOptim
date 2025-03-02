@@ -71,11 +71,11 @@ int main(int argc, char ** argv)
         auto proto = fem::buildChorinMatricesDok<float>(velocityMesh, pressureMesh, integrationDegree);
         const auto tProto = sw.millis(true);
 
-        velocityMassTest = proto.velocityMass.buildCsr();
-        velocityStiffnessTest = proto.velocityStiffness.buildCsr();
-        pressureStiffnessTest = proto.pressureStiffness.buildCsr();
-        vpDivTest = proto.velocityPressureDiv.buildCsr();
-        pvDivTest = proto.pressureVelocityDiv.buildCsr();
+        velocityMassTest = proto.velocityMass.buildCsr2();
+        velocityStiffnessTest = proto.velocityStiffness.buildCsr2();
+        pressureStiffnessTest = proto.pressureStiffness.buildCsr2();
+        vpDivTest = proto.velocityPressureDiv.buildCsr2();
+        pvDivTest = proto.pressureVelocityDiv.buildCsr2();
         const auto tBuild = sw.millis();
         const auto tTotal = bigSw.millis();
 

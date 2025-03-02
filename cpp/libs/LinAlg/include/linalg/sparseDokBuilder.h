@@ -38,6 +38,8 @@ namespace linalg
 
         CsrMatrix<F> buildCsr();
 
+        CsrMatrix<F> buildCsr2();
+
         int numRows() const;
 
         int numCols() const;
