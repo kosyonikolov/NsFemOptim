@@ -2,6 +2,7 @@
 #define LIBS_LINALG_INCLUDE_LINALG_SPARSEDOKBUILDER
 
 #include <vector>
+#include <span>
 
 namespace linalg
 {
@@ -33,6 +34,8 @@ namespace linalg
         void resize(const int newRows, const int newCols);
 
         void add(const int row, const int col, F value);
+
+        void add(std::span<const SparseMatrixDokBuilder<F>*> others);
 
         void compress();
 

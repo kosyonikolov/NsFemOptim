@@ -29,6 +29,23 @@ namespace linalg
     }
 
     template <typename F>
+    void SparseMatrixDokBuilder<F>::add(std::span<const SparseMatrixDokBuilder<F>*> others)
+    {
+        // Count extra space
+        int extraSpace = 0;
+        for (const SparseMatrixDokBuilder<F> * b : others)
+        {
+            extraSpace += b->triplets.size();
+        }
+        triplets.reserve(triplets.size() + extraSpace);
+
+        for (const SparseMatrixDokBuilder<F> * b : others)
+        {
+            triplets.insert(triplets.end(), b->triplets.begin(), b->triplets.end());
+        }
+    }
+
+    template <typename F>
     void SparseMatrixDokBuilder<F>::compress()
     {
         if (triplets.empty())
@@ -190,6 +207,7 @@ namespace linalg
     template SparseMatrixDokBuilder<float>::SparseMatrixDokBuilder(const int rows, const int cols);
     template void SparseMatrixDokBuilder<float>::resize(const int newRows, const int newCols);
     template void SparseMatrixDokBuilder<float>::add(const int row, const int col, float value);
+    template void SparseMatrixDokBuilder<float>::add(std::span<const SparseMatrixDokBuilder<float>*> others);
     template void SparseMatrixDokBuilder<float>::compress();
     template CsrMatrix<float> SparseMatrixDokBuilder<float>::buildCsr();
     template CsrMatrix<float> SparseMatrixDokBuilder<float>::buildCsr2();

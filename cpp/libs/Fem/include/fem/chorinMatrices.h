@@ -35,6 +35,10 @@ namespace fem
     template <typename F>
     ChorinMatricesDok<F> buildChorinMatricesDok(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
                                                 const int integrationDegree);
+
+    template <typename F>
+    ChorinMatricesDok<F> buildChorinMatricesDokMt(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
+                                                  const int integrationDegree, const int nThreads);
 }; // namespace fem
 
 #endif /* LIBS_FEM_INCLUDE_FEM_CHORINMATRICES */

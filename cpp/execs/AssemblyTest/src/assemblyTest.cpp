@@ -41,7 +41,7 @@ int main(int argc, char ** argv)
     SpMat pressureStiffness;
     SpMat vpDiv, pvDiv;
 
-    const int nRuns = 3;
+    const int nRuns = 5;
     for (int i = 0; i < nRuns; i++)
     {
         u::Stopwatch bigSw;
@@ -61,6 +61,7 @@ int main(int argc, char ** argv)
     }
 
     std::cout << "Test DOK building\n";
+    const int nThreads = 4;
     SpMat velocityMassTest, velocityStiffnessTest;
     SpMat pressureStiffnessTest;
     SpMat vpDivTest, pvDivTest;
@@ -68,7 +69,7 @@ int main(int argc, char ** argv)
     {
         u::Stopwatch bigSw;
         u::Stopwatch sw;
-        auto proto = fem::buildChorinMatricesDok<float>(velocityMesh, pressureMesh, integrationDegree);
+        auto proto = fem::buildChorinMatricesDokMt<float>(velocityMesh, pressureMesh, integrationDegree, nThreads);
         const auto tProto = sw.millis(true);
 
         velocityMassTest = proto.velocityMass.buildCsr2();
