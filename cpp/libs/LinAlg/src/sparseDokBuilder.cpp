@@ -29,7 +29,7 @@ namespace linalg
     }
 
     template <typename F>
-    void SparseMatrixDokBuilder<F>::add(std::span<const SparseMatrixDokBuilder<F>*> others)
+    void SparseMatrixDokBuilder<F>::add(std::span<const SparseMatrixDokBuilder<F> *> others)
     {
         // Count extra space
         int extraSpace = 0;
@@ -204,9 +204,9 @@ namespace linalg
         return cols;
     }
 
-    SparseMatrixPrototypeBuilder::SparseMatrixPrototypeBuilder(const int rows, const int cols) : rows(rows), cols(cols)
+    SparseMatrixPrototypeBuilder::SparseMatrixPrototypeBuilder(const int rows, const int cols)
+        : rows(rows), cols(cols)
     {
-
     }
 
     void SparseMatrixPrototypeBuilder::resize(const int newRows, const int newCols)
@@ -271,6 +271,39 @@ namespace linalg
         }
 
         coords.resize(j + 1);
+    }
+
+    template <typename F>
+    CsrMatrix<F> SparseMatrixPrototypeBuilder::buildCsrPrototype()
+    {
+        compress();
+        const int nnz = coords.size();
+
+        CsrMatrix<F> result;
+        result.rows = rows;
+        result.cols = cols;
+        result.values.resize(nnz);
+        result.column.resize(nnz);
+        result.rowStart.resize(rows + 1, nnz);
+
+        if (nnz == 0)
+        {
+            return result;
+        }
+
+        int row = -1;
+        for (int i = 0; i < nnz; i++)
+        {
+            const auto & curr = coords[i];
+            if (curr.row != row)
+            {
+                row = curr.row;
+                result.rowStart[row] = i;
+            }
+            result.column[i] = curr.col;
+        }
+
+        return result;
     }
 
     template <typename F>
@@ -343,12 +376,13 @@ namespace linalg
     template SparseMatrixDokBuilder<float>::SparseMatrixDokBuilder(const int rows, const int cols);
     template void SparseMatrixDokBuilder<float>::resize(const int newRows, const int newCols);
     template void SparseMatrixDokBuilder<float>::add(const int row, const int col, float value);
-    template void SparseMatrixDokBuilder<float>::add(std::span<const SparseMatrixDokBuilder<float>*> others);
+    template void SparseMatrixDokBuilder<float>::add(std::span<const SparseMatrixDokBuilder<float> *> others);
     template void SparseMatrixDokBuilder<float>::compress();
     template CsrMatrix<float> SparseMatrixDokBuilder<float>::buildCsr();
     template CsrMatrix<float> SparseMatrixDokBuilder<float>::buildCsr2();
     template int SparseMatrixDokBuilder<float>::numRows() const;
     template int SparseMatrixDokBuilder<float>::numCols() const;
 
+    template CsrMatrix<float> SparseMatrixPrototypeBuilder::buildCsrPrototype<float>();
     template CsrMatrix<float> SparseMatrixPrototypeBuilder::buildCsrPrototype2<float>();
 } // namespace linalg

@@ -76,6 +76,9 @@ namespace linalg
         void compress();
 
         template <typename F>
+        CsrMatrix<F> buildCsrPrototype();
+
+        template <typename F>
         CsrMatrix<F> buildCsrPrototype2();
 
         int numRows() const;
