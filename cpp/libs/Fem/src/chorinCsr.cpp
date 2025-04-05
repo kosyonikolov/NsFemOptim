@@ -81,7 +81,7 @@ namespace fem
         std::vector<int> idsV(elSizeV);
         std::vector<int> idsP(elSizeP);
 
-        u::Stopwatch sw;
+        // u::Stopwatch sw;
         const int nElem = velocityMesh.numElements;
         for (int i = 0; i < nElem; i++)
         {
@@ -125,15 +125,15 @@ namespace fem
                 }
             }
         }
-        const auto tElements = sw.millis(true);
+        // const auto tElements = sw.millis(true);
 
         PrototypeBundle<F> result;
         result.velocity = velocityProtoBuilder.buildCsrPrototype2<F>();
         result.pressure = pressureProtoBuilder.buildCsrPrototype2<F>();
         result.velocityPressureDiv = velocityPressureDivProtoBuilder.buildCsrPrototype2<F>();
         result.pressureVelocityDiv = pressureVelocityDivProtoBuilder.buildCsrPrototype2<F>();
-        const auto tAsm = sw.millis();
-        std::cout << std::format("{}: elements = {}, assemble = {}\n", __FUNCTION__, tElements, tAsm);
+        // const auto tAsm = sw.millis();
+        // std::cout << std::format("{}: elements = {}, assemble = {}\n", __FUNCTION__, tElements, tAsm);
 
         return result;
     }
@@ -447,9 +447,9 @@ namespace fem
         }
 
         // Build prototype matrices first - structure only
-        u::Stopwatch sw;
+        // u::Stopwatch sw;
         const auto proto = buildPrototypes4T<F>(velocityMesh, pressureMesh);
-        const auto tProto = sw.millis(true);
+        // const auto tProto = sw.millis(true);
 
         std::vector<ValueBundle<F>> bundles(nThreads);
         for (int i = 0; i < nThreads; i++)
@@ -461,7 +461,7 @@ namespace fem
             bundles[i].pressureVelocityDiv.resize(proto.pressureVelocityDiv.column.size());
         }
 
-        const auto tAlloc = sw.millis(true);
+        // const auto tAlloc = sw.millis(true);
 
         const int nExtraThreads = nThreads - 1;
         std::vector<std::future<void>> extraThreads(nExtraThreads);
@@ -476,7 +476,7 @@ namespace fem
         }
         buildPart<F>(proto, bundles[0], velocityMesh, pressureMesh, integrationDegree, counter);
 
-        const auto tParts = sw.millis(true);
+        // const auto tParts = sw.millis(true);
 
         for (int i = 0; i < nExtraThreads; i++)
         {
@@ -484,7 +484,7 @@ namespace fem
             bundles[0] += bundles[i + 1];
         }
 
-        const auto tSum = sw.millis(true);
+        // const auto tSum = sw.millis(true);
 
         ChorinCsrMatrices<F> result;
         assembleCsrPrototypeValue(result.velocityMass, proto.velocity, bundles[0].velocityMass);
@@ -493,10 +493,10 @@ namespace fem
         assembleCsrPrototypeValue(result.velocityPressureDiv, proto.velocityPressureDiv, bundles[0].velocityPressureDiv);
         assembleCsrPrototypeValue(result.pressureVelocityDiv, proto.pressureVelocityDiv, bundles[0].pressureVelocityDiv);
 
-        const auto tMove = sw.millis();
+        // const auto tMove = sw.millis();
 
-        std::cout << std::format("Times: proto = {}, alloc = {}, parts = {}, sum = {}, move = {}\n",
-                                 tProto, tAlloc, tParts, tSum, tMove);
+        // std::cout << std::format("Times: proto = {}, alloc = {}, parts = {}, sum = {}, move = {}\n",
+        //                          tProto, tAlloc, tParts, tSum, tMove);
 
         return result;
     }
