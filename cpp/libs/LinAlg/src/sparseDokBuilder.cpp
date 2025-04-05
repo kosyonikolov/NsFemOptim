@@ -204,6 +204,142 @@ namespace linalg
         return cols;
     }
 
+    SparseMatrixPrototypeBuilder::SparseMatrixPrototypeBuilder(const int rows, const int cols) : rows(rows), cols(cols)
+    {
+
+    }
+
+    void SparseMatrixPrototypeBuilder::resize(const int newRows, const int newCols)
+    {
+        rows = newRows;
+        cols = newCols;
+    }
+
+    void SparseMatrixPrototypeBuilder::add(const int row, const int col)
+    {
+        assert(row >= 0 && row < rows);
+        assert(col >= 0 && col < cols);
+        coords.emplace_back(row, col);
+    }
+
+    void SparseMatrixPrototypeBuilder::add(std::span<const SparseMatrixPrototypeBuilder *> others)
+    {
+        // Count extra space
+        int extraSpace = 0;
+        for (const auto * b : others)
+        {
+            extraSpace += b->coords.size();
+        }
+        coords.reserve(coords.size() + extraSpace);
+
+        for (const auto * b : others)
+        {
+            coords.insert(coords.end(), b->coords.begin(), b->coords.end());
+        }
+    }
+
+    void SparseMatrixPrototypeBuilder::compress()
+    {
+        if (coords.empty())
+        {
+            // Nothing to do
+            return;
+        }
+
+        auto cmp = [](const Coordinate & a, const Coordinate & b)
+        {
+            if (a.row != b.row)
+            {
+                return a.row < b.row;
+            }
+            return a.col < b.col;
+        };
+
+        std::sort(coords.begin(), coords.end(), cmp);
+
+        const int n = coords.size();
+        int j = 0; // Survivor idx
+        for (int i = 1; i < n; i++)
+        {
+            auto & s = coords[j];
+            const auto & curr = coords[i];
+            if (curr.row != s.row || curr.col != s.col)
+            {
+                j++;
+                coords[j] = curr;
+            }
+        }
+
+        coords.resize(j + 1);
+    }
+
+    template <typename F>
+    CsrMatrix<F> SparseMatrixPrototypeBuilder::buildCsrPrototype2()
+    {
+        // Bucket sort
+        std::vector<std::vector<int>> rowPairs(rows);
+        for (const Coordinate & c : coords)
+        {
+            assert(c.row >= 0 && c.row < rows);
+            rowPairs[c.row].emplace_back(c.col);
+        }
+
+        int nnz = 0;
+        for (int r = 0; r < rows; r++)
+        {
+            auto & rp = rowPairs[r];
+            if (rp.empty())
+            {
+                continue;
+            }
+            std::sort(rp.begin(), rp.end());
+            int j = 0;
+            const int n = rp.size();
+            for (int i = 1; i < n; i++)
+            {
+                if (rp[i] != rp[j])
+                {
+                    j++;
+                    rp[j] = rp[i];
+                }
+            }
+
+            j++; // Now it's the NNZ on this row
+            rp.resize(j);
+            nnz += j;
+        }
+
+        CsrMatrix<F> result;
+        result.rows = rows;
+        result.cols = cols;
+        result.column.resize(nnz);
+        result.rowStart.resize(rows + 1, nnz);
+
+        int i = 0;
+        for (int r = 0; r < rows; r++)
+        {
+            const auto & rp = rowPairs[r];
+            result.rowStart[r] = i;
+            for (const int col : rp)
+            {
+                result.column[i] = col;
+                i++;
+            }
+        }
+
+        return result;
+    }
+
+    int SparseMatrixPrototypeBuilder::numRows() const
+    {
+        return rows;
+    }
+
+    int SparseMatrixPrototypeBuilder::numCols() const
+    {
+        return cols;
+    }
+
     template SparseMatrixDokBuilder<float>::SparseMatrixDokBuilder(const int rows, const int cols);
     template void SparseMatrixDokBuilder<float>::resize(const int newRows, const int newCols);
     template void SparseMatrixDokBuilder<float>::add(const int row, const int col, float value);
@@ -213,4 +349,6 @@ namespace linalg
     template CsrMatrix<float> SparseMatrixDokBuilder<float>::buildCsr2();
     template int SparseMatrixDokBuilder<float>::numRows() const;
     template int SparseMatrixDokBuilder<float>::numCols() const;
+
+    template CsrMatrix<float> SparseMatrixPrototypeBuilder::buildCsrPrototype2<float>();
 } // namespace linalg

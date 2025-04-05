@@ -62,7 +62,7 @@ int main(int argc, char ** argv)
     }
 
     std::cout << "Test CSR building\n";
-    const int nThreads = 4;
+    const int nThreads = 8;
     SpMat velocityMassTest, velocityStiffnessTest;
     SpMat pressureStiffnessTest;
     SpMat vpDivTest, pvDivTest;
