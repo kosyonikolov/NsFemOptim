@@ -29,6 +29,25 @@ namespace linalg
             return slice(std::span<const int>(rowIds.data(), rowIds.size()), std::span<const int>(colIds.data(), colIds.size()));
         }
 
+        // Find indices in values for the given row/col pairs
+        // Non-found values are set to -1
+        // Column ids MUST be sorted
+        void findOffsets(const int row, std::span<const int> columnIds, std::span<int> dstOffsets) const;
+
+        template <VectorLike<int> A, VectorLike<int> B>
+        void findOffsets(const int row, const A & columnIds, B & dstOffsets) const
+        {
+            return findOffsets(row, std::span<const int>(columnIds.data(), columnIds.size()), std::span<int>(dstOffsets.data(), dstOffsets.size()));
+        }
+
+        void findOffsetsUnsorted(const int row, std::span<const int> columnIds, std::span<int> dstOffsets) const;
+
+        template <VectorLike<int> A, VectorLike<int> B>
+        void findOffsetsUnsorted(const int row, const A & columnIds, B & dstOffsets) const
+        {
+            return findOffsetsUnsorted(row, std::span<const int>(columnIds.data(), columnIds.size()), std::span<int>(dstOffsets.data(), dstOffsets.size()));
+        }
+
         bool compareLayout(const CsrMatrix<F> & other) const;
 
         bool compareValues(const CsrMatrix<F> & other, const F epsilon) const;

@@ -1,6 +1,7 @@
 #include <linalg/csrMatrix.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <format>
 #include <stdexcept>
@@ -87,6 +88,74 @@ namespace linalg
         result.rowStart.back() = result.values.size();
 
         return result;
+    }
+
+    template <typename F>
+    void CsrMatrix<F>::findOffsets(const int row, std::span<const int> columnIds, std::span<int> dstOffsets) const
+    {
+        assert(std::is_sorted(columnIds.begin(), columnIds.end()));
+        assert(columnIds.size() == dstOffsets.size());
+
+        if (row < 0 || row >= rows)
+        {
+            std::fill(dstOffsets.begin(), dstOffsets.end(), -1);
+            return;
+        }
+
+        int j = 0;
+        const int j1 = rowStart[row + 1];
+        int i = 0;
+        const int i1 = columnIds.size();
+        while (i < i1 && j < j1)
+        {
+            if (columnIds[i] == column[j])
+            {
+                dstOffsets[i] = j;
+            }
+            else if (columnIds[i] > column[j])
+            {
+                j++;
+            }
+            else // columnIds[i] < column[j]
+            {
+                dstOffsets[i] = -1;
+                i++;
+            }
+        }
+
+        while (i < i1)
+        {
+            dstOffsets[i] = -1;
+            i++;
+        }
+    }
+
+    template <typename F>
+    void CsrMatrix<F>::findOffsetsUnsorted(const int row, std::span<const int> columnIds, std::span<int> dstOffsets) const
+    {
+        assert(columnIds.size() == dstOffsets.size());
+
+        if (row < 0 || row >= rows)
+        {
+            std::fill(dstOffsets.begin(), dstOffsets.end(), -1);
+            return;
+        }
+
+        const int * pStart = column.data() + rowStart[row];
+        const int * pEnd = column.data() + rowStart[row + 1];
+        for (int i = 0; i < columnIds.size(); i++)
+        {
+            const int q = columnIds[i];
+            const int * firstGeq = std::lower_bound(pStart, pEnd, q);
+            if (firstGeq == pEnd || *firstGeq != q)
+            {
+                dstOffsets[i] = -1;
+            } 
+            else
+            {
+                dstOffsets[i] = firstGeq - column.data();
+            }
+        }
     }
 
     template <typename F>
@@ -194,6 +263,10 @@ namespace linalg
     }
 
     template CsrMatrix<float> CsrMatrix<float>::slice(std::span<const int> rowIds, std::span<const int> colIds) const;
+
+    template void CsrMatrix<float>::findOffsets(const int row, std::span<const int> columnIds, std::span<int> dstOffsets) const;
+
+    template void CsrMatrix<float>::findOffsetsUnsorted(const int row, std::span<const int> columnIds, std::span<int> dstOffsets) const;
 
     template bool CsrMatrix<float>::compareLayout(const CsrMatrix<float> & other) const;
     template bool CsrMatrix<double>::compareLayout(const CsrMatrix<double> & other) const;

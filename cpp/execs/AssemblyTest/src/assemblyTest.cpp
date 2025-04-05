@@ -8,6 +8,7 @@
 #include <element/factory.h>
 
 #include <fem/chorinMatrices.h>
+#include <fem/chorinCsr.h>
 
 #include <linalg/csrMatrix.h>
 
@@ -60,7 +61,7 @@ int main(int argc, char ** argv)
         std::cout << std::format("{}: total = {}, proto = {}, build = {}\n", i, tTotal, tProto, tBuild);
     }
 
-    std::cout << "Test DOK building\n";
+    std::cout << "Test CSR building\n";
     const int nThreads = 4;
     SpMat velocityMassTest, velocityStiffnessTest;
     SpMat pressureStiffnessTest;
@@ -69,18 +70,17 @@ int main(int argc, char ** argv)
     {
         u::Stopwatch bigSw;
         u::Stopwatch sw;
-        auto proto = fem::buildChorinMatricesDokMt<float>(velocityMesh, pressureMesh, integrationDegree, nThreads);
-        const auto tProto = sw.millis(true);
 
-        velocityMassTest = proto.velocityMass.buildCsr2();
-        velocityStiffnessTest = proto.velocityStiffness.buildCsr2();
-        pressureStiffnessTest = proto.pressureStiffness.buildCsr2();
-        vpDivTest = proto.velocityPressureDiv.buildCsr2();
-        pvDivTest = proto.pressureVelocityDiv.buildCsr2();
-        const auto tBuild = sw.millis();
+        auto res = fem::buildChorinCsrMatrices<float>(velocityMesh, pressureMesh, integrationDegree, nThreads);
         const auto tTotal = bigSw.millis();
 
-        std::cout << std::format("{}: total = {}, proto = {}, build = {}\n", i, tTotal, tProto, tBuild);
+        velocityMassTest = std::move(res.velocityMass);
+        velocityStiffnessTest = std::move(res.velocityStiffness);
+        pressureStiffnessTest = std::move(res.pressureStiffness);
+        vpDivTest = std::move(res.velocityPressureDiv);
+        pvDivTest = std::move(res.pressureVelocityDiv);
+
+        std::cout << std::format("{}: total = {}\n", i, tTotal);
     }
 
     // Make sure it's correct
