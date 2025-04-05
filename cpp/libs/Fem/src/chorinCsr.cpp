@@ -79,17 +79,14 @@ namespace fem
         Builder pressureVelocityDivProtoBuilder(2 * numVelocityNodes, numPressureNodes);
 
         std::vector<int> idsV(elSizeV);
-        std::vector<el::Point> ptsV(elSizeV);
-
         std::vector<int> idsP(elSizeP);
-        std::vector<el::Point> ptsP(elSizeP);
 
         u::Stopwatch sw;
         const int nElem = velocityMesh.numElements;
         for (int i = 0; i < nElem; i++)
         {
             // ========================= Velocity-only matrices =========================
-            velocityMesh.getElement(i, idsV.data(), ptsV.data());
+            velocityMesh.getElement(i, idsV.data(), 0);
             for (int r = 0; r < elSizeV; r++)
             {
                 const int i = idsV[r];
@@ -101,7 +98,7 @@ namespace fem
             }
 
             // ========================= Pressure-only matrices =========================
-            pressureMesh.getElement(i, idsP.data(), ptsP.data());
+            pressureMesh.getElement(i, idsP.data(), 0);
             for (int r = 0; r < elSizeP; r++)
             {
                 const int i = idsP[r];
@@ -137,6 +134,128 @@ namespace fem
         result.pressureVelocityDiv = pressureVelocityDivProtoBuilder.buildCsrPrototype2<F>();
         const auto tAsm = sw.millis();
         std::cout << std::format("{}: elements = {}, assemble = {}\n", __FUNCTION__, tElements, tAsm);
+
+        return result;
+    }
+
+    template <typename F>
+    PrototypeBundle<F> buildPrototypes4T(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh)
+    {
+        if (velocityMesh.numElements != pressureMesh.numElements)
+        {
+            throw std::invalid_argument(std::format("{}: Velocity and pressure meshes have different number of elements", __FUNCTION__));
+        }
+
+        const int numVelocityNodes = velocityMesh.nodes.size(); // ! Counts only one channel, not X + Y - multiply by 2 to get all velocity nodes
+        const int numPressureNodes = pressureMesh.nodes.size();
+        const int elSizeV = velocityMesh.getElementSize();
+        const int elSizeP = pressureMesh.getElementSize();
+
+        // Build prototype matrices first - structure only
+        using Builder = linalg::SparseMatrixPrototypeBuilder;
+
+        Builder velocityProtoBuilder(numVelocityNodes, numVelocityNodes);
+        Builder pressureProtoBuilder(numPressureNodes, numPressureNodes);
+        Builder velocityPressureDivProtoBuilder(numPressureNodes, 2 * numVelocityNodes);
+        Builder pressureVelocityDivProtoBuilder(2 * numVelocityNodes, numPressureNodes);
+
+        const int nElem = velocityMesh.numElements;
+        PrototypeBundle<F> result;
+
+        auto buildVelocity = [&]() -> void
+        {
+            std::vector<int> idsV(elSizeV);
+            for (int i = 0; i < nElem; i++)
+            {
+                velocityMesh.getElement(i, idsV.data(), 0);
+                for (int r = 0; r < elSizeV; r++)
+                {
+                    const int i = idsV[r];
+                    for (int c = 0; c < elSizeV; c++)
+                    {
+                        const int j = idsV[c];
+                        velocityProtoBuilder.add(i, j);
+                    }
+                }
+            }
+            result.velocity = velocityProtoBuilder.buildCsrPrototype2<F>();
+        };
+
+        auto buildPressure = [&]() -> void
+        {
+            std::vector<int> idsP(elSizeP);
+            for (int i = 0; i < nElem; i++)
+            {
+                pressureMesh.getElement(i, idsP.data(), 0);
+                for (int r = 0; r < elSizeP; r++)
+                {
+                    const int i = idsP[r];
+                    for (int c = 0; c < elSizeP; c++)
+                    {
+                        const int j = idsP[c];
+                        pressureProtoBuilder.add(i, j);
+                    }
+                }
+            }
+            result.pressure = pressureProtoBuilder.buildCsrPrototype2<F>();
+        };
+
+        auto buildVpd = [&]() -> void
+        {
+            std::vector<int> idsV(elSizeV);
+            std::vector<int> idsP(elSizeP);
+            for (int i = 0; i < nElem; i++)
+            {
+                velocityMesh.getElement(i, idsV.data(), 0);
+                pressureMesh.getElement(i, idsP.data(), 0);
+                for (int iV = 0; iV < elSizeV; iV++)
+                {
+                    const int gV = idsV[iV];
+                    for (int iP = 0; iP < elSizeP; iP++)
+                    {
+                        const int gP = idsP[iP];
+                        // clang-format off
+                        velocityPressureDivProtoBuilder.add(gP, gV                   );
+                        velocityPressureDivProtoBuilder.add(gP, gV + numVelocityNodes);
+                        // clang-format on
+                    }
+                }
+            }
+            result.velocityPressureDiv = velocityPressureDivProtoBuilder.buildCsrPrototype2<F>();
+        };
+
+        auto buildPvd = [&]() -> void
+        {
+            std::vector<int> idsV(elSizeV);
+            std::vector<int> idsP(elSizeP);
+            for (int i = 0; i < nElem; i++)
+            {
+                velocityMesh.getElement(i, idsV.data(), 0);
+                pressureMesh.getElement(i, idsP.data(), 0);
+                for (int iV = 0; iV < elSizeV; iV++)
+                {
+                    const int gV = idsV[iV];
+                    for (int iP = 0; iP < elSizeP; iP++)
+                    {
+                        const int gP = idsP[iP];
+                        // clang-format off
+                        pressureVelocityDivProtoBuilder.add(gV, gP                   );
+                        pressureVelocityDivProtoBuilder.add(gV + numVelocityNodes, gP);
+                        // clang-format on
+                    }
+                }
+            }
+            result.pressureVelocityDiv = pressureVelocityDivProtoBuilder.buildCsrPrototype2<F>();
+        };
+
+        std::future<void> velocityF = std::async(std::launch::async, buildVelocity);
+        std::future<void> pressureF = std::async(std::launch::async, buildPressure);
+        std::future<void> vpdF = std::async(std::launch::async, buildVpd);
+        buildPvd();
+
+        velocityF.get();
+        pressureF.get();
+        vpdF.get();
 
         return result;
     }
@@ -329,7 +448,7 @@ namespace fem
 
         // Build prototype matrices first - structure only
         u::Stopwatch sw;
-        const auto proto = buildPrototypes<F>(velocityMesh, pressureMesh);
+        const auto proto = buildPrototypes4T<F>(velocityMesh, pressureMesh);
         const auto tProto = sw.millis(true);
 
         std::vector<ValueBundle<F>> bundles(nThreads);
