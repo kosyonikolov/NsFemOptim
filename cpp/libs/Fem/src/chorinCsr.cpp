@@ -84,6 +84,7 @@ namespace fem
         std::vector<int> idsP(elSizeP);
         std::vector<el::Point> ptsP(elSizeP);
 
+        u::Stopwatch sw;
         const int nElem = velocityMesh.numElements;
         for (int i = 0; i < nElem; i++)
         {
@@ -127,12 +128,15 @@ namespace fem
                 }
             }
         }
+        const auto tElements = sw.millis(true);
 
         PrototypeBundle<F> result;
         result.velocity = velocityProtoBuilder.buildCsrPrototype2<F>();
         result.pressure = pressureProtoBuilder.buildCsrPrototype2<F>();
         result.velocityPressureDiv = velocityPressureDivProtoBuilder.buildCsrPrototype2<F>();
         result.pressureVelocityDiv = pressureVelocityDivProtoBuilder.buildCsrPrototype2<F>();
+        const auto tAsm = sw.millis();
+        std::cout << std::format("{}: elements = {}, assemble = {}\n", __FUNCTION__, tElements, tAsm);
 
         return result;
     }
