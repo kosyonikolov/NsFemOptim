@@ -2,6 +2,8 @@
 #include <string>
 #include <format>
 
+#include <opencv2/opencv.hpp>
+
 #include <mesh/io.h>
 #include <mesh/concreteMesh.h>
 
@@ -15,6 +17,24 @@
 #include <utils/stopwatch.h>
 
 using SpMat = linalg::CsrMatrix<float>;
+
+template <typename F>
+void dumpSpMatImage(const std::string & fileName, const linalg::CsrMatrix<F> & m)
+{
+    cv::Mat img = cv::Mat::zeros(m.rows, m.cols, CV_8UC1);
+    for (int iy = 0; iy < m.rows; iy++)
+    {
+        uint8_t * line = img.ptr<uint8_t>(iy);
+        const int j1 = m.rowStart[iy + 1];
+        for (int j = m.rowStart[iy]; j < j1; j++)
+        {
+            const int col = m.column[j];
+            line[col] = 255;
+        }
+    }
+    std::cout << fileName << "\n";
+    cv::imwrite(fileName, img);
+}
 
 int main(int argc, char ** argv)
 {
@@ -42,7 +62,7 @@ int main(int argc, char ** argv)
     SpMat pressureStiffness;
     SpMat vpDiv, pvDiv;
 
-    const int nRuns = 5;
+    const int nRuns = 1;
     for (int i = 0; i < nRuns; i++)
     {
         u::Stopwatch bigSw;
@@ -59,6 +79,14 @@ int main(int argc, char ** argv)
         const auto tTotal = bigSw.millis();
 
         std::cout << std::format("{}: total = {}, proto = {}, build = {}\n", i, tTotal, tProto, tBuild);
+    }
+
+    if (false)
+    {
+        dumpSpMatImage("velocity.png", velocityMass);
+        dumpSpMatImage("pressure.png", pressureStiffness);
+        dumpSpMatImage("vpDiv.png", vpDiv);
+        dumpSpMatImage("pvDiv.png", pvDiv);
     }
 
     std::cout << "Test CSR building\n";
