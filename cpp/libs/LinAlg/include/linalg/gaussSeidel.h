@@ -9,7 +9,7 @@ namespace linalg
     double gaussSeidel(const CsrMatrix<F> & m, F * x, const F * b,
                        const int maxIters, const double eps);
 
-    template <typename F, VectorLike<F> A, VectorLike<F> B>
+    template <typename F, u::VectorLike<F> A, u::VectorLike<F> B>
     double gaussSeidel(const CsrMatrix<F> & m, A & x, const B & b,
                        const int maxIters, const double eps)
     {
@@ -34,7 +34,7 @@ namespace linalg
     std::tuple<double, double> gaussSeidel2ch(const CsrMatrix<F> & m, F * x, const F * b,
                                               const int maxIters, const double eps);
 
-    template <typename F, VectorLike<F> A, VectorLike<F> B>
+    template <typename F, u::VectorLike<F> A, u::VectorLike<F> B>
     std::tuple<double, double> gaussSeidel2ch(const CsrMatrix<F> & m, A & x, const B & b,
                                               const int maxIters, const double eps)
     {

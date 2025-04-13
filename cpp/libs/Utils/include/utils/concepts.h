@@ -1,10 +1,10 @@
-#ifndef LIBS_LINALG_INCLUDE_LINALG_CONCEPTS
-#define LIBS_LINALG_INCLUDE_LINALG_CONCEPTS
+#ifndef LIBS_UTILS_INCLUDE_UTILS_CONCEPTS
+#define LIBS_UTILS_INCLUDE_UTILS_CONCEPTS
 
 #include <concepts>
 #include <cstddef>
 
-namespace linalg
+namespace u
 {
     // clang-format off
     template <typename C, typename T>
@@ -17,4 +17,4 @@ namespace linalg
     // clang-format on
 }
 
-#endif /* LIBS_LINALG_INCLUDE_LINALG_CONCEPTS */
+#endif /* LIBS_UTILS_INCLUDE_UTILS_CONCEPTS */

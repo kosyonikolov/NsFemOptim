@@ -6,7 +6,7 @@
 #include <vector>
 #include <span>
 
-#include <linalg/concepts.h>
+#include <utils/concepts.h>
 
 namespace linalg
 {
@@ -23,7 +23,7 @@ namespace linalg
 
         CsrMatrix<F> slice(std::span<const int> rowIds, std::span<const int> colIds) const;
 
-        template <VectorLike<int> A, VectorLike<int> B>
+        template <u::VectorLike<int> A, u::VectorLike<int> B>
         CsrMatrix<F> slice(const A & rowIds, const B & colIds)
         {
             return slice(std::span<const int>(rowIds.data(), rowIds.size()), std::span<const int>(colIds.data(), colIds.size()));
@@ -34,7 +34,7 @@ namespace linalg
         // Column ids MUST be sorted
         void findOffsets(const int row, std::span<const int> columnIds, std::span<int> dstOffsets) const;
 
-        template <VectorLike<int> A, VectorLike<int> B>
+        template <u::VectorLike<int> A, u::VectorLike<int> B>
         void findOffsets(const int row, const A & columnIds, B & dstOffsets) const
         {
             return findOffsets(row, std::span<const int>(columnIds.data(), columnIds.size()), std::span<int>(dstOffsets.data(), dstOffsets.size()));
@@ -42,7 +42,7 @@ namespace linalg
 
         void findOffsetsUnsorted(const int row, std::span<const int> columnIds, std::span<int> dstOffsets) const;
 
-        template <VectorLike<int> A, VectorLike<int> B>
+        template <u::VectorLike<int> A, u::VectorLike<int> B>
         void findOffsetsUnsorted(const int row, const A & columnIds, B & dstOffsets) const
         {
             return findOffsetsUnsorted(row, std::span<const int>(columnIds.data(), columnIds.size()), std::span<int>(dstOffsets.data(), dstOffsets.size()));
@@ -60,7 +60,7 @@ namespace linalg
 
         // template <typename A, typename B>
         //     requires VectorLike<A, F> && VectorLike<B, F>
-        template <VectorLike<F> A, VectorLike<F> B>
+        template <u::VectorLike<F> A, u::VectorLike<F> B>
         void rMult(const A & src, B & dst) const
         {
             if (src.size() != cols)
@@ -79,7 +79,7 @@ namespace linalg
         // sqrt((Mx - b).^2 / rows)
         double mse(const F * x, const F * b) const;
 
-        template <VectorLike<F> A, VectorLike<F> B>
+        template <u::VectorLike<F> A, u::VectorLike<F> B>
         double mse(const A & x, const B & b) const
         {
             if (x.size() != cols)
