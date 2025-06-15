@@ -36,12 +36,50 @@ namespace cu
             }
         }
 
+        template <u::VectorLike<T> C>
+        vec(const C & cpuVec)
+        {
+            size_t n = cpuVec.size();
+            if (n == 0)
+            {
+                throw std::invalid_argument(std::format("[{}:{}] Size can't be zero", __FILE__, __LINE__));
+            }
+            const size_t totalLength = n * sizeof(T);
+            auto rc = cudaMalloc(&devicePtr, totalLength);
+            if (rc != cudaError_t::cudaSuccess)
+            {
+                throw std::runtime_error(std::format("[{}:{}] Failed to allocate CUDA memory: {}", __FILE__, __LINE__, static_cast<int>(rc)));
+            }
+            length = n;
+            upload(cpuVec.data());
+        }
+
         vec(vec && other)
         {
+            if (devicePtr)
+            {
+                cudaFree(devicePtr);
+            }
             devicePtr = other.devicePtr;
             length = other.length;
             other.devicePtr = 0;
             other.length = 0;
+        }
+
+        vec & operator=(vec && other) noexcept
+        {
+            if (this != &other)
+            {
+                if (devicePtr)
+                {
+                    cudaFree(devicePtr);
+                }
+                devicePtr = other.devicePtr;
+                length = other.length;
+                other.devicePtr = 0;
+                other.length = 0;
+            }
+            return *this;
         }
 
         ~vec()
@@ -206,6 +244,36 @@ namespace cu
                                                         __FILE__, __LINE__, dst.size(), length));
             }
             downloadAsync(dst.data(), stream);
+        }
+
+        template <u::VectorLike<T> C>
+        void overwriteUpload(const C & src)
+        {
+            const size_t n = src.size();
+            if (!n)
+            {
+                throw std::invalid_argument(std::format("[{}:{}] Size can't be 0\n", __FILE__, __LINE__));
+            }
+
+            // Release old memory, if any
+            if (devicePtr)
+            {
+                assert(length > 0);
+                auto rc = cudaFree(devicePtr);
+                if (rc != cudaSuccess)
+                {
+                    throw std::runtime_error(std::format("[{}:{}] Failed to free CUDA memory: {}\n", __FILE__, __LINE__, static_cast<int>(rc)));
+                }
+            }
+
+            const size_t totalLength = n * sizeof(T);
+            auto rc = cudaMalloc(&devicePtr, totalLength);
+            if (rc != cudaError_t::cudaSuccess)
+            {
+                throw std::runtime_error(std::format("[{}:{}] Failed to allocate CUDA memory: {}", __FILE__, __LINE__, static_cast<int>(rc)));
+            }
+            length = n;
+            upload(src.data());
         }
     };
 } // namespace cu

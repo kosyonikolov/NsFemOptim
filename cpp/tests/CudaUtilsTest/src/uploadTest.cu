@@ -3,6 +3,7 @@
 #include <vector>
 
 #include <cu/vec.h>
+#include <cu/csr.h>
 
 __global__ void mul10(int * vec, const int size)
 {
