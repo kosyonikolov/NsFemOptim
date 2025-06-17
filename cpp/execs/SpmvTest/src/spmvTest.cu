@@ -19,6 +19,7 @@
 #include <utils/stopwatch.h>
 
 #include <cu/csr.h>
+#include <cu/csrF.h>
 #include <cu/vec.h>
 
 class Semaphore
@@ -364,6 +365,60 @@ void testCuSpmv(cusparseHandle_t handle, const linalg::CsrMatrix<float> & m)
     }
 }
 
+void testCuCsrFSpmv(const linalg::CsrMatrix<float> & m)
+{
+    const int nRows = m.rows;
+    const int nCols = m.cols;
+
+    std::vector<float> src(nCols);
+    std::vector<float> dstCpu(nRows), dstGpu(nRows);
+
+    std::default_random_engine rng(std::random_device{}());
+    std::uniform_real_distribution<float> dist(-50.0f, 10.0f);
+
+    cu::csrF csrF(m);
+
+    const int nRuns = 10;
+    for (int i = 0; i < nRuns; i++)
+    {
+        for (int j = 0; j < src.size(); j++)
+        {
+            src[j] = dist(rng);
+        }
+
+        // Cpu calc
+        u::Stopwatch sw;
+        m.rMult(src, dstCpu);
+        const auto tCpu = sw.millis(true);
+
+        // Gpu calc
+        csrF.x.upload(src);
+        const auto tUp = sw.millis(true);
+        csrF.spmv();
+        const auto tCuda = sw.millis(true);
+        csrF.b.download(dstGpu);
+        const auto tDown = sw.millis();
+
+        float maxDelta = 0;
+        double sumSq = 0;
+        for (int j = 0; j < dstCpu.size(); j++)
+        {
+            const float delta = dstGpu[j] - dstCpu[j];
+            if (std::abs(delta) > std::abs(maxDelta))
+            {
+                maxDelta = delta;
+            }
+            sumSq += delta * delta;
+        }
+
+        const float avgErr = std::sqrt(sumSq / dstCpu.size());
+        std::cout << std::format("{} / {}: CPU = {} ms; up = {} ms, CUDA = {} ms, down = {} ms\n",
+                                 i + 1, nRuns, tCpu, tUp, tCuda, tDown);
+        std::cout << std::format("\tAvg err = {}, max delta = {}\n", avgErr, maxDelta);
+    }
+}
+
+
 int main(int argc, char ** argv)
 {
     const std::string usageMsg = "./SpmvTest <csr matrix>";
@@ -378,6 +433,9 @@ int main(int argc, char ** argv)
     const std::string matrixFname = argv[1];
 
     auto m = linalg::readCsr<float>(matrixFname);
+
+    testCuCsrFSpmv(m);
+    return 0;
 
     cusparseHandle_t handle;
     auto rc = cusparseCreate(&handle);
