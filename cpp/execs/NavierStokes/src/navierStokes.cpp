@@ -420,6 +420,11 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
     Eigen::SimplicialLDLT<SpMat> velocityMassSolver(velocityMass);
     Eigen::SimplicialLDLT<SpMat> pressureStiffnessSolver(pressureInternalStiffness);
+    if (false)
+    {
+        auto dumpM = linalg::csrFromEigen(pressureInternalStiffness);
+        linalg::write("dump/pressure_mat.bin", dumpM);
+    }
 
     mesh::Interpolator velocityInterp(velocityMesh, 0.05);
     mesh::Interpolator pressureInterp(pressureMesh, 0.05);
@@ -579,6 +584,19 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         Vector pressureInt = pressureStiffnessSolver.solve(pressureRhs);
         assert(pressureInt.rows() == numInternalPressureNodes);
         assert(pressureInt.cols() == 1);
+        if (false)
+        {
+            const int n = pressureInt.rows();
+            std::vector<float> rhs(n);
+            std::vector<float> sol(n);
+            for (int i = 0; i < n; i++)
+            {
+                rhs[i] = pressureRhs[i];
+                sol[i] = pressureInt[i];
+            }
+            linalg::write(std::format("dump/pressure_rhs_{}.bin", iT), rhs);
+            linalg::write(std::format("dump/pressure_sol_{}.bin", iT), sol);
+        }
 
         Vector pressure(numPressureNodes);
         pressure.setZero();
