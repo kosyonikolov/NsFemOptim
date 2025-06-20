@@ -1,1 +1,2 @@
 add_subdirectory(CudaUtilsTest)
+add_subdirectory(CgTest)
