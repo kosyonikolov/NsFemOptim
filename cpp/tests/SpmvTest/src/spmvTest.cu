@@ -18,9 +18,10 @@
 
 #include <utils/stopwatch.h>
 
-#include <cu/csr.h>
-#include <cu/csrF.h>
 #include <cu/vec.h>
+#include <cu/csrF.h>
+#include <cu/spmv.h>
+#include <cu/cusparse.h>
 
 class Semaphore
 {
@@ -192,88 +193,6 @@ public:
     }
 };
 
-struct CuSpmv
-{
-    const static auto op = cusparseOperation_t::CUSPARSE_OPERATION_NON_TRANSPOSE;
-
-    cusparseHandle_t handle;
-
-    cu::vec<float> src, dst;
-    cu::csr<float> mat;
-    cu::vec<char> workspace;
-
-    float alpha = 1.0f;
-    float beta = 0.0f;
-
-    cusparseDnVecDescr_t srcDesc, dstDesc;
-    cusparseSpMatDescr_t matDesc;
-
-    CuSpmv(cusparseHandle_t handle, const linalg::CsrMatrix<float> & m)
-        : handle(handle), src(m.cols), dst(m.rows)
-    {
-        mat.upload(m);
-
-        // Create cusparse descriptors
-        auto rc = cusparseCreateDnVec(&srcDesc, src.size(), src.get(), cudaDataType::CUDA_R_32F);
-        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
-        {
-            throw std::runtime_error(std::format("Failed to source vector: {}", cusparseGetErrorName(rc)));
-        }
-
-        rc = cusparseCreateDnVec(&dstDesc, dst.size(), dst.get(), cudaDataType::CUDA_R_32F);
-        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
-        {
-            throw std::runtime_error(std::format("Failed to source vector: {}", cusparseGetErrorName(rc)));
-        }
-
-        rc = cusparseCreateCsr(&matDesc, mat.rows, mat.cols,
-                               mat.values.size(), mat.rowStart.get(),
-                               mat.column.get(), mat.values.get(),
-                               cusparseIndexType_t::CUSPARSE_INDEX_32I,
-                               cusparseIndexType_t::CUSPARSE_INDEX_32I,
-                               cusparseIndexBase_t::CUSPARSE_INDEX_BASE_ZERO,
-                               cudaDataType::CUDA_R_32F);
-        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
-        {
-            throw std::runtime_error(std::format("Failed to create CSR: {}", cusparseGetErrorName(rc)));
-        }
-
-        size_t spmvBufferSize = 0;
-        rc = cusparseSpMV_bufferSize(handle, op,
-                                     &alpha, matDesc, srcDesc,
-                                     &beta, dstDesc,
-                                     cudaDataType::CUDA_R_32F, cusparseSpMVAlg_t::CUSPARSE_SPMV_ALG_DEFAULT,
-                                     &spmvBufferSize);
-        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
-        {
-            throw std::runtime_error(std::format("cusparseSpMV_bufferSize failed: {}", cusparseGetErrorName(rc)));
-        }
-        std::cout << "Workspace buffer size: " << spmvBufferSize << "\n";
-
-        workspace = cu::vec<char>(spmvBufferSize);
-
-        rc = cusparseSpMV_preprocess(handle, op,
-                                     &alpha, matDesc, srcDesc, &beta, dstDesc,
-                                     cudaDataType::CUDA_R_32F, cusparseSpMVAlg_t::CUSPARSE_SPMV_ALG_DEFAULT,
-                                     workspace.get());
-        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
-        {
-            throw std::runtime_error(std::format("cusparseSpMV_preprocess failed: {}", cusparseGetErrorName(rc)));
-        }
-    }
-
-    void calculate()
-    {
-        auto rc = cusparseSpMV(handle, op, &alpha,
-                               matDesc, srcDesc, &beta, dstDesc,
-                               cudaDataType::CUDA_R_32F, cusparseSpMVAlg_t::CUSPARSE_SPMV_ALG_DEFAULT,
-                               workspace.get());
-        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
-        {
-            throw std::runtime_error(std::format("cusparseSpMV failed: {}", cusparseGetErrorName(rc)));
-        }
-    }
-};
 
 void testMemorySpeed()
 {
@@ -312,59 +231,6 @@ void testMemorySpeed()
     std::cout << "Test val = " << test << "\n";
 }
 
-void testCuSpmv(cusparseHandle_t handle, const linalg::CsrMatrix<float> & m)
-{
-    const int nRows = m.rows;
-    const int nCols = m.cols;
-
-    std::vector<float> src(nCols);
-    std::vector<float> dstCpu(nRows), dstGpu(nRows);
-
-    std::default_random_engine rng(std::random_device{}());
-    std::uniform_real_distribution<float> dist(-50.0f, 10.0f);
-
-    CuSpmv cuSpmv(handle, m);
-
-    const int nRuns = 10;
-    for (int i = 0; i < nRuns; i++)
-    {
-        for (int j = 0; j < src.size(); j++)
-        {
-            src[j] = dist(rng);
-        }
-
-        // Cpu calc
-        u::Stopwatch sw;
-        m.rMult(src, dstCpu);
-        const auto tCpu = sw.millis(true);
-
-        // Gpu calc
-        cuSpmv.src.upload(src);
-        const auto tUp = sw.millis(true);
-        cuSpmv.calculate();
-        const auto tCuda = sw.millis(true);
-        cuSpmv.dst.download(dstGpu);
-        const auto tDown = sw.millis();
-
-        float maxDelta = 0;
-        double sumSq = 0;
-        for (int j = 0; j < dstCpu.size(); j++)
-        {
-            const float delta = dstGpu[j] - dstCpu[j];
-            if (std::abs(delta) > std::abs(maxDelta))
-            {
-                maxDelta = delta;
-            }
-            sumSq += delta * delta;
-        }
-
-        const float avgErr = std::sqrt(sumSq / dstCpu.size());
-        std::cout << std::format("{} / {}: CPU = {} ms; up = {} ms, CUDA = {} ms, down = {} ms\n",
-                                 i + 1, nRuns, tCpu, tUp, tCuda, tDown);
-        std::cout << std::format("\tAvg err = {}, max delta = {}\n", avgErr, maxDelta);
-    }
-}
-
 void testCuCsrFSpmv(const linalg::CsrMatrix<float> & m)
 {
     const int nRows = m.rows;
@@ -377,6 +243,8 @@ void testCuCsrFSpmv(const linalg::CsrMatrix<float> & m)
     std::uniform_real_distribution<float> dist(-50.0f, 10.0f);
 
     cu::csrF csrF(m);
+    cu::Sparse lib;
+    cu::spmv spmv(lib.handle(), csrF);
 
     const int nRuns = 10;
     for (int i = 0; i < nRuns; i++)
@@ -392,11 +260,11 @@ void testCuCsrFSpmv(const linalg::CsrMatrix<float> & m)
         const auto tCpu = sw.millis(true);
 
         // Gpu calc
-        csrF.x.upload(src);
+        spmv.x.upload(src);
         const auto tUp = sw.millis(true);
-        csrF.spmv();
+        spmv.compute();
         const auto tCuda = sw.millis(true);
-        csrF.b.download(dstGpu);
+        spmv.b.download(dstGpu);
         const auto tDown = sw.millis();
 
         float maxDelta = 0;
@@ -435,110 +303,6 @@ int main(int argc, char ** argv)
     auto m = linalg::readCsr<float>(matrixFname);
 
     testCuCsrFSpmv(m);
-    return 0;
-
-    cusparseHandle_t handle;
-    auto rc = cusparseCreate(&handle);
-    if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
-    {
-        std::cerr << "Failed to create cusparse: " << cusparseGetErrorName(rc) << "\n";
-        return 1;
-    }
-
-    testCuSpmv(handle, m);
-    return 0;
-
-    const int nRows = m.rows;
-    const int nCols = m.cols;
-
-    std::vector<float> v(nCols), resultS(nRows), resultP(nRows);
-    std::default_random_engine rng(1337151516);
-    std::uniform_real_distribution<float> dist(-10, 10);
-    for (int i = 0; i < nCols; i++)
-    {
-        v[i] = dist(rng);
-    }
-
-    CuSpmv cuSpmv(handle, m);
-
-    const int nRuns = 10;
-
-    std::cout << "Serial times:\n";
-    double sum = 0;
-    for (int i = 0; i < nRuns; i++)
-    {
-        u::Stopwatch sw;
-        m.rMult(v, resultS);
-        const auto currT = sw.millis();
-        std::cout << currT << " ms\n";
-        sum += currT;
-    }
-    const double avgSerial = sum / nRuns;
-
-    std::cout << "CUDA times:\n";
-    sum = 0;
-    for (int i = 0; i < nRuns; i++)
-    {
-        u::Stopwatch sw;
-        cuSpmv.calculate();
-        const auto currT = sw.millis();
-        std::cout << currT << " ms\n";
-        sum += currT;
-    }
-    const double avgCuda = sum / nRuns;
-
-    std::vector<float> resultCuda(nRows);
-    cuSpmv.dst.download(resultCuda);
-    double sumSq = 0;
-    float maxDelta = 0;
-    for (int i = 0; i < nRows; i++)
-    {
-        const float a = resultS[i];
-        const float b = resultCuda[i];
-        const float delta = a - b;
-        sumSq += delta * delta;
-        if (std::abs(delta) > std::abs(maxDelta))
-        {
-            maxDelta = delta;
-        }
-        if (std::abs(delta) > 1e-3f)
-        {
-            std::cout << i << ": " << delta << "\n";
-        }
-    }
-    const double avg = std::sqrt(sumSq / nRows);
-    std::cout << "Average error: " << avg << ", max delta = " << maxDelta << "\n";
-
-    const int threadCount = 4;
-    ParallelSpmv<float> pSpmv(m, threadCount);
-
-    std::cout << "Parallel times:\n";
-    sum = 0;
-    for (int i = 0; i < nRuns; i++)
-    {
-        u::Stopwatch sw;
-        pSpmv.rMult(v, resultP);
-        const auto currT = sw.millis();
-        std::cout << currT << " ms\n";
-        sum += currT;
-    }
-    const double avgParallel = sum / nRuns;
-
-    std::cout << std::format("Average: serial = {} ms, parallel = {} ms\n", avgSerial, avgParallel);
-
-    sumSq = 0;
-    maxDelta = 0;
-    for (int i = 0; i < nRows; i++)
-    {
-        const float delta = resultP[i] - resultS[i];
-        if (std::abs(delta) > std::abs(maxDelta))
-        {
-            maxDelta = delta;
-        }
-        sumSq += delta * delta;
-    }
-    const float mse = std::sqrt(sumSq / nRows);
-    std::cout << std::format("Max delta = {}, MSE = {}\n", maxDelta, mse);
-
+    
     return 0;
 }

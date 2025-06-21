@@ -25,9 +25,4 @@ namespace cu
             std::cerr << "Failed to destroy cusparse handle: " << cusparseGetErrorName(rc) << "\n";
         }
     }
-
-    cusparseHandle_t getCuSparseHandle()
-    {
-        return Sparse::instance().handle();
-    }
 }

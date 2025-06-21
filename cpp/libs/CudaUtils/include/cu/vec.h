@@ -7,6 +7,8 @@
 #include <iostream>
 #include <stdexcept>
 
+#include <cusparse.h>
+
 #include <utils/concepts.h>
 
 namespace cu
@@ -16,6 +18,18 @@ namespace cu
     {
         T * devicePtr = 0;
         size_t length = 0;
+
+        cusparseDnVecDescr_t cuSparseDescriptor = 0;
+
+        void resetDescriptor()
+        {
+            if (cuSparseDescriptor)
+            {
+                auto rc = cusparseDestroyDnVec(cuSparseDescriptor);
+                assert(rc == cusparseStatus_t::CUSPARSE_STATUS_SUCCESS);
+                cuSparseDescriptor = 0;
+            }
+        }
 
     public:
         vec() = default;
@@ -78,12 +92,15 @@ namespace cu
                 length = other.length;
                 other.devicePtr = 0;
                 other.length = 0;
+                other.cuSparseDescriptor = 0;
             }
             return *this;
         }
 
         ~vec()
         {
+            resetDescriptor();
+
             if (devicePtr)
             {
                 assert(length > 0);
@@ -102,6 +119,7 @@ namespace cu
 
         void reset()
         {
+            resetDescriptor();
             if (devicePtr)
             {
                 assert(length > 0);
@@ -120,6 +138,7 @@ namespace cu
 
         T * release()
         {
+            resetDescriptor();
             auto ret = devicePtr;
             devicePtr = 0;
             length = 0;
@@ -256,6 +275,7 @@ namespace cu
             }
 
             // Release old memory, if any
+            resetDescriptor();
             if (devicePtr)
             {
                 assert(length > 0);
@@ -275,6 +295,9 @@ namespace cu
             length = n;
             upload(src.data());
         }
+
+        // Creates if it doesn't exist
+        cusparseDnVecDescr_t getCuSparseDescriptor();
     };
 } // namespace cu
 

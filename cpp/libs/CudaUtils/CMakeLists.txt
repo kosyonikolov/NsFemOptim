@@ -1,4 +1,4 @@
-add_library(CudaUtils src/cusparse.cu src/csrF.cu)
+add_library(CudaUtils src/cusparse.cu src/vec.cu src/csrF.cu src/spmv.cu)
 target_include_directories(CudaUtils PUBLIC include/)
 target_link_libraries(CudaUtils PUBLIC Utils LinAlg)
 
