@@ -1,8 +1,4 @@
 add_subdirectory(MeshParser)
-add_subdirectory(MatrixTest)
 add_subdirectory(L2Projection)
 add_subdirectory(HeatEquation)
 add_subdirectory(NavierStokes)
-add_subdirectory(GsTest)
-add_subdirectory(SpmvTest)
-add_subdirectory(AssemblyTest)

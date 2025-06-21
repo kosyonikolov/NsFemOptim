@@ -1,2 +1,6 @@
+add_subdirectory(MatrixTest)
+add_subdirectory(GsTest)
+add_subdirectory(SpmvTest)
+add_subdirectory(AssemblyTest)
 add_subdirectory(CudaUtilsTest)
 add_subdirectory(CgTest)
