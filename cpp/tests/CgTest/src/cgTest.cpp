@@ -3,9 +3,12 @@
 #include <string>
 #include <vector>
 
+#include <Eigen/SparseCore>
+
 #include <linalg/gaussSeidel.h>
 #include <linalg/io.h>
 #include <linalg/vectors.h>
+#include <linalg/eigen.h>
 
 template <typename F, u::VectorLike<F> V>
 double conjugateGradient(const linalg::CsrMatrix<F> & m, V & x, const V & b,
@@ -60,7 +63,7 @@ double conjugateGradient(const linalg::CsrMatrix<F> & m, V & x, const V & b,
 
         const double dotR1 = linalg::dot(r, r);
         const double currMse = std::sqrt(dotR1 / n);
-        std::cout << "[CG] " << iter << ": " << currMse << "\n";
+        // std::cout << "[CG] " << iter << ": " << currMse << "\n";
         lastMse = currMse;
 
         // Check for convergence
@@ -81,14 +84,39 @@ double conjugateGradient(const linalg::CsrMatrix<F> & m, V & x, const V & b,
     return lastMse;
 }
 
+void cgEigen(const linalg::CsrMatrix<float> & m, std::vector<float> & x, const std::vector<float> & b,
+             const int maxIters, const double target)
+{
+    using Vector = Eigen::Vector<float, Eigen::Dynamic>;
+    
+    auto eigM = linalg::eigenFromCsr(m);
+    const int n = x.size();
+    Vector eigX(n);
+    Vector eigB(n);
+    for (int i = 0; i < n; i++)
+    {
+        eigX(i) = x[i];
+        eigB(i) = b[i];
+    }
+
+    Eigen::ConjugateGradient<decltype(eigM), Eigen::Lower | Eigen::Upper, Eigen::IdentityPreconditioner> cg(eigM);
+    cg.setMaxIterations(maxIters);
+    cg.setTolerance(target);
+    Vector sol = cg.solveWithGuess(eigB, eigX);
+    for (int i = 0; i < n; i++)
+    {
+        x[i] = sol[i];
+    }
+}
+
 template <typename V>
 double conjugateGradientD(const linalg::CsrMatrix<float> & m, V & xIn, const V & bIn,
                           const int maxIters, const double target)
 {
     const int n = m.cols;
     assert(n == m.rows);
-    assert(n == x.size());
-    assert(n == b.size());
+    assert(n == xIn.size());
+    assert(n == bIn.size());
 
     // Work vectors
     std::vector<double> x(n);
@@ -201,9 +229,16 @@ int main(int argc, char ** argv)
 
     const auto n = sol.size();
 
-    std::vector<float> xCg(n, 0);
     const double target = 1e-6;
-    const double cgRes = conjugateGradient(m, xCg, rhs, std::min<int>(n, 200), target);
+    const int maxIters = std::min<int>(n, 200);
+
+    std::vector<float> xCgEig(n, 0);
+    cgEigen(m, xCgEig, rhs, maxIters, target);
+    const double cgEigMse = m.mse(xCgEig, rhs);
+    std::cout << "cgEigMse = " << cgEigMse << "\n";
+
+    std::vector<float> xCg(n, 0);
+    const double cgRes = conjugateGradient(m, xCg, rhs, maxIters, target);
     const double cgMse = m.mse(xCg, rhs);
     std::cout << "cgRes = " << cgRes << ", cgMse = " << cgMse << "\n";
 
