@@ -1,7 +1,5 @@
 #include <cu/csrF.h>
 
-#include <cu/cusparse.h>
-
 namespace cu
 {
     csrF::csrF(const linalg::CsrMatrix<float> & cpuMat)

@@ -15,13 +15,15 @@
 #include <linalg/gaussSeidel.h>
 #include <linalg/graphs.h>
 #include <linalg/io.h>
+#include <linalg/vectors.h>
 
 #include <utils/stopwatch.h>
 
-#include <cu/vec.h>
+#include <cu/blas.h>
 #include <cu/csrF.h>
+#include <cu/sparse.h>
 #include <cu/spmv.h>
-#include <cu/cusparse.h>
+#include <cu/vec.h>
 
 class Semaphore
 {
@@ -193,7 +195,6 @@ public:
     }
 };
 
-
 void testMemorySpeed()
 {
     const int n = 1 << 30;
@@ -286,9 +287,48 @@ void testCuCsrFSpmv(const linalg::CsrMatrix<float> & m)
     }
 }
 
+void testDot(const int n)
+{
+    std::default_random_engine rng(std::random_device{}());
+    std::uniform_real_distribution<float> dist(-1, 1);
+
+    std::vector<float> cpuVec(n);
+    cu::vec<float> gpuVec(n);
+
+    cu::Blas blas;
+
+    const int numRuns = 10;
+    for (int k = 0; k < numRuns; k++)
+    {
+        for (int i = 0; i < n; i++)
+        {
+            cpuVec[i] = dist(rng);
+        }
+        gpuVec.upload(cpuVec);
+
+        u::Stopwatch sw;
+        const float dotCpu = linalg::dot(cpuVec, cpuVec);
+        const auto tCpu = sw.millis();
+
+        sw.reset();
+        float dotGpu = 0;
+        auto rc = cublasSdot(blas.handle, n, gpuVec.get(), 1, gpuVec.get(), 1, &dotGpu);
+        const auto tGpu = sw.millis();
+        if (rc != CUBLAS_STATUS_SUCCESS)
+        {
+            std::cerr << "!!! Cublas error !!!\n";
+        }
+
+        std::cout << std::format("{} / {}: cpu = {} ({} ms), gpu = {} ({} ms)\n", k + 1, numRuns,
+                                 dotCpu, tCpu, dotGpu, tGpu);
+    }
+}
 
 int main(int argc, char ** argv)
 {
+    testDot(1 << 20);
+    return 0;
+
     const std::string usageMsg = "./SpmvTest <csr matrix>";
     if (argc != 2)
     {
@@ -303,6 +343,6 @@ int main(int argc, char ** argv)
     auto m = linalg::readCsr<float>(matrixFname);
 
     testCuCsrFSpmv(m);
-    
+
     return 0;
 }

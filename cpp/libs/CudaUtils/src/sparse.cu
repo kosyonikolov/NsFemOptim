@@ -1,4 +1,4 @@
-#include <cu/cusparse.h>
+#include <cu/sparse.h>
 
 #include <stdexcept>
 #include <format>
