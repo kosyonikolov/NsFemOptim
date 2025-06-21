@@ -244,6 +244,22 @@ namespace linalg
     }
 
     template <typename F>
+    void CsrMatrix<F>::rMultD(const double * src, double * dst) const
+    {
+        for (int i = 0; i < rows; i++)
+        {
+            const int j1 = rowStart[i + 1];
+            double sum = 0;
+            for (int j = rowStart[i]; j < j1; j++)
+            {
+                const int col = column[j];
+                sum += values[j] * src[col];
+            }
+            dst[i] = sum;
+        }
+    }
+
+    template <typename F>
     double CsrMatrix<F>::mse(const F * x, const F * b) const
     {
         double errSum = 0;
@@ -279,6 +295,9 @@ namespace linalg
 
     template void CsrMatrix<float>::rMult(const float * src, float * dst) const;
     template void CsrMatrix<double>::rMult(const double * src, double * dst) const;
+
+    template void CsrMatrix<float>::rMultD(const double * src, double * dst) const;
+    template void CsrMatrix<double>::rMultD(const double * src, double * dst) const;
 
     template double CsrMatrix<float>::mse(const float * x, const float * b) const;
     template double CsrMatrix<double>::mse(const double * x, const double * b) const;

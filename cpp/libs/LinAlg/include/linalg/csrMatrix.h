@@ -76,6 +76,24 @@ namespace linalg
             rMult(src.data(), dst.data());
         }
 
+        void rMultD(const double * src, double * dst) const;
+
+        template <u::VectorLike<double> A, u::VectorLike<double> B>
+        void rMultD(const A & src, B & dst) const
+        {
+            if (src.size() != cols)
+            {
+                throw std::invalid_argument(std::format("{}: Bad size of src vector [{}] - expected {}",
+                                                        __FUNCTION__, src.size(), cols));
+            }
+            if (dst.size() != rows)
+            {
+                throw std::invalid_argument(std::format("{}: Bad size of dst vector [{}] - expected {}",
+                                                        __FUNCTION__, dst.size(), rows));
+            }
+            rMultD(src.data(), dst.data());
+        }
+
         // sqrt((Mx - b).^2 / rows)
         double mse(const F * x, const F * b) const;
 
