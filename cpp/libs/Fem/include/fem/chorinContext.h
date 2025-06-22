@@ -25,6 +25,8 @@ namespace fem
         linalg::CsrMatrix<float> pressureStiffnessInternal;
         linalg::CsrMatrix<float> velocityPressureDiv;
         linalg::CsrMatrix<float> pressureVelocityDiv;
+        
+        linalg::CsrMatrix<float> convection;
         linalg::CsrMatrix<float> fastConvectionIntegration;
     };
 }

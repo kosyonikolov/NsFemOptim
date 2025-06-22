@@ -14,6 +14,7 @@
 #include <NavierStokes/chorinEigen.h>
 #include <NavierStokes/nsConfig.h>
 #include <NavierStokes/solution.h>
+#include <NavierStokes/buildContext.h>
 
 int main(int argc, char ** argv)
 {
@@ -54,6 +55,16 @@ int main(int argc, char ** argv)
     DfgConditions cond;
     cond.viscosity = cfg.viscosity;
     cond.peakVelocity = cfg.peakVelocity;
+
+    // const auto context = buildChorinContext(velocityMesh, pressureMesh, cond);
+    // {
+    //     const bool ok = context.velocityStiffness.compareLayout(context.convection);
+    //     if (!ok)
+    //     {
+    //         std::cerr << "Velocity stiffness has different layout compared to convection!\n";
+    //         return 1;
+    //     }
+    // }
 
     const float tau = cfg.tau;
     const float maxT = cfg.maxT;

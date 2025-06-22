@@ -1,5 +1,7 @@
 #include <fem/fastConvection.h>
 
+// #include <utils/stopwatch.h>
+
 namespace fem
 {
     using Triplet = Eigen::Triplet<float>;
@@ -10,6 +12,7 @@ namespace fem
         const int nElems = velocityMesh.numElements;
         const int elSize = velocityMesh.getElementSize();
 
+        // u::Stopwatch sw;
         convection = Eigen::SparseMatrix<float, Eigen::RowMajor>(nNodes, nNodes);
 
         // Assemble convection with fake data to create the sparse pattern
@@ -31,6 +34,9 @@ namespace fem
 
         convection.setFromTriplets(fakeTriplets.begin(), fakeTriplets.end());
         assert(convection.isCompressed());
+
+        // const auto tFakeConvection = sw.millis(true);
+
         const int nnz = convection.nonZeros();
         auto pVal = convection.valuePtr();
 
@@ -85,6 +91,9 @@ namespace fem
             }
         }
         integration.setFromTriplets(integrationTriplets.begin(), integrationTriplets.end());
+
+        // const auto tIntegration = sw.millis();
+        // std::cout << "Fast integration times: fake = " << tFakeConvection << " ms, integration = " << tIntegration << " ms\n";
 
         velocity = Eigen::Vector<float, Eigen::Dynamic>(2 * nNodes);
         values = Eigen::Vector<float, Eigen::Dynamic>(nnz);

@@ -1,7 +1,8 @@
 add_executable(NavierStokes src/navierStokes.cpp
                             src/nsConfig.cpp
                             src/borders.cpp
-                            src/chorinEigen.cpp)
+                            src/chorinEigen.cpp
+                            src/buildContext.cpp)
 target_link_libraries(NavierStokes Mesh Utils LinAlg Fem)
 target_include_directories(NavierStokes PRIVATE include/)
 
