@@ -12,6 +12,7 @@
 #include <element/factory.h>
 
 #include <NavierStokes/chorinEigen.h>
+#include <NavierStokes/chorinCuda.h>
 #include <NavierStokes/nsConfig.h>
 #include <NavierStokes/solution.h>
 #include <NavierStokes/buildContext.h>
@@ -68,7 +69,18 @@ int main(int argc, char ** argv)
 
     const float tau = cfg.tau;
     const float maxT = cfg.maxT;
-    auto sol = solveNsChorinEigen(velocityMesh, pressureMesh, cond, tau, maxT);
+    Solution sol;
+    std::cout << "Algorithm = " << cfg.algo << "\n";
+    if (cfg.algo == "chorinEigen")
+    {
+        std::cout << "Using CPU Eigen-based Chorin method\n";
+        sol = solveNsChorinEigen(velocityMesh, pressureMesh, cond, tau, maxT);
+    }
+    else if (cfg.algo == "chorinCuda")
+    {
+        std::cout << "Using CUDA Chorin method\n";
+        sol = solveNsChorinCuda(velocityMesh, pressureMesh, cond, tau, maxT);
+    }
 
     // Find range of pressure
     float minP = std::numeric_limits<float>::infinity();

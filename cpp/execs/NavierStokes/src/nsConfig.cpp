@@ -17,6 +17,8 @@ NsConfig parseNsConfig(const std::string & fileName)
     parser.populate(file);
     NsConfig result;
 #define PARSE(x) parser.parse(#x, result.x)
+    PARSE(algo);
+
     PARSE(viscosity);
     PARSE(peakVelocity);
     PARSE(maxT);

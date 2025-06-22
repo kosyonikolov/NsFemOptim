@@ -47,4 +47,13 @@ namespace cu
             throw std::runtime_error(std::format("Failed to set cublas pointer mode: {}", cublasGetStatusName(rc)));
         }
     }
+
+    void saxpy(Blas & blas, const int n, float * src, float * dst, float alpha)
+    {
+        auto rc = cublasSaxpy(blas.handle, n, &alpha, src, 1, dst, 1);
+        if (rc != cublasStatus_t::CUBLAS_STATUS_SUCCESS)
+        {
+            throw std::runtime_error(std::format("cublasSaxpy failed: {}", cublasGetStatusName(rc)));
+        }
+    }
 } // namespace cu

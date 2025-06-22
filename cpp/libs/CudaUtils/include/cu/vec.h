@@ -18,6 +18,7 @@ namespace cu
     {
         T * devicePtr = 0;
         size_t length = 0;
+        bool externallyOwned = false;
 
         cusparseDnVecDescr_t cuSparseDescriptor = 0;
 
@@ -33,7 +34,33 @@ namespace cu
 
     public:
         vec() = default;
-        vec(const vec & other) = delete;
+
+        // Creates a deep copy
+        vec(const vec & other)
+        {
+            cuSparseDescriptor = 0;
+            length = other.length;
+            const size_t totalLength = length * sizeof(T);
+            auto rc = cudaMalloc(&devicePtr, totalLength);
+            if (rc != cudaError_t::cudaSuccess)
+            {
+                throw std::runtime_error(std::format("[{}:{}] Failed to allocate CUDA memory: {}", __FILE__, __LINE__, static_cast<int>(rc)));
+            }
+
+            rc = cudaMemcpy(devicePtr, other.devicePtr, totalLength, cudaMemcpyKind::cudaMemcpyDeviceToDevice);
+            if (rc != cudaError_t::cudaSuccess)
+            {
+                throw std::runtime_error(std::format("[{}:{}] Failed to copy CUDA memory: {}", __FILE__, __LINE__, static_cast<int>(rc)));
+            }
+        }
+
+        // Wrapper for externally managed memory
+        vec(T * extData, const int n)
+        {
+            devicePtr = extData;
+            length = n;
+            externallyOwned = true;
+        }
 
         vec(const size_t n)
             : length(n)
@@ -101,7 +128,13 @@ namespace cu
         {
             resetDescriptor();
 
-            if (devicePtr)
+            if (externallyOwned)
+            {
+                externallyOwned = false;
+                devicePtr = 0;
+                length = 0;
+            }
+            else if (devicePtr)
             {
                 assert(length > 0);
                 auto rc = cudaFree(devicePtr);
@@ -117,10 +150,29 @@ namespace cu
             }
         }
 
+        void memsetZero()
+        {
+            if (!devicePtr)
+            {
+                throw std::runtime_error("memsetZero called on an empty vector");
+            }
+            auto rc = cudaMemset(devicePtr, 0, length * sizeof(T));
+            if (rc != cudaError_t::cudaSuccess)
+            {
+                throw std::runtime_error(std::format("Failed to cuda memset: {}", cudaGetErrorName(rc)));
+            }
+        }
+
         void reset()
         {
             resetDescriptor();
-            if (devicePtr)
+            if (externallyOwned)
+            {
+                externallyOwned = false;
+                devicePtr = 0;
+                length = 0;
+            }
+            else if (devicePtr)
             {
                 assert(length > 0);
                 auto rc = cudaFree(devicePtr);
@@ -142,6 +194,7 @@ namespace cu
             auto ret = devicePtr;
             devicePtr = 0;
             length = 0;
+            externallyOwned = false;
             return ret;
         }
 
@@ -276,7 +329,7 @@ namespace cu
 
             // Release old memory, if any
             resetDescriptor();
-            if (devicePtr)
+            if (devicePtr && !externallyOwned)
             {
                 assert(length > 0);
                 auto rc = cudaFree(devicePtr);
@@ -286,6 +339,7 @@ namespace cu
                 }
             }
 
+            externallyOwned = false;
             const size_t totalLength = n * sizeof(T);
             auto rc = cudaMalloc(&devicePtr, totalLength);
             if (rc != cudaError_t::cudaSuccess)

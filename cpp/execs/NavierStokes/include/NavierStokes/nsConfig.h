@@ -5,6 +5,8 @@
 
 struct NsConfig
 {
+    std::string algo = "chorinEigen";
+
     float viscosity = 0.001;
     float peakVelocity = 1;
     float maxT = 1;

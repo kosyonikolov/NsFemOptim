@@ -58,7 +58,13 @@ namespace cu
             throw std::runtime_error(std::format("cublasSdot failed: {}", cublasGetStatusName(blasRc)));
         }
 
-        double lastMse = std::numeric_limits<double>::infinity();
+        double lastMse = std::sqrt(dotR0 / n);
+        std::cout << "[CGF] Init mse = " << lastMse << "\n";
+        if (lastMse <= target)
+        {
+            return lastMse;
+        }
+
         for (int iter = 0; iter < maxIters; iter++)
         {
             // m.rMult(p, d);
@@ -99,7 +105,7 @@ namespace cu
                 throw std::runtime_error(std::format("cublasSdot failed: {}", cublasGetStatusName(blasRc)));
             }
             const double currMse = std::sqrt(dotR1 / n);
-            std::cout << "[CGF] " << iter << ": " << currMse << "\n";
+            // std::cout << "[CGF] " << iter << ": " << currMse << "\n";
             lastMse = currMse;
 
             // Check for convergence

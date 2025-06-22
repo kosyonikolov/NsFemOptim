@@ -20,6 +20,8 @@ namespace cu
 
         void setPointerMode(cublasPointerMode_t pointerMode);
     };
+
+    void saxpy(Blas & blas, const int n, float * src, float * dst, float alpha);
 }
 
 #endif /* LIBS_CUDAUTILS_INCLUDE_CU_BLAS */
