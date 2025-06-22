@@ -22,6 +22,8 @@ namespace cu
     };
 
     void saxpy(Blas & blas, const int n, float * src, float * dst, float alpha);
+
+    void scale(Blas & blas, const int n, float * dst, float alpha);
 }
 
 #endif /* LIBS_CUDAUTILS_INCLUDE_CU_BLAS */

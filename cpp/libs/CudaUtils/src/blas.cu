@@ -56,4 +56,13 @@ namespace cu
             throw std::runtime_error(std::format("cublasSaxpy failed: {}", cublasGetStatusName(rc)));
         }
     }
+
+    void scale(Blas & blas, const int n, float * dst, float alpha)
+    {
+        auto rc = cublasSscal(blas.handle, n, &alpha, dst, 1);
+        if (rc != cublasStatus_t::CUBLAS_STATUS_SUCCESS)
+        {
+            throw std::runtime_error(std::format("cublasSscal failed: {}", cublasGetStatusName(rc)));
+        }
+    }
 } // namespace cu

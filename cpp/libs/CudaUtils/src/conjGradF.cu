@@ -59,7 +59,7 @@ namespace cu
         }
 
         double lastMse = std::sqrt(dotR0 / n);
-        std::cout << "[CGF] Init mse = " << lastMse << "\n";
+        // std::cout << "[CGF] Init mse = " << lastMse << "\n";
         if (lastMse <= target)
         {
             return lastMse;

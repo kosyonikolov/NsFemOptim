@@ -35,6 +35,16 @@ using SpMat = Eigen::SparseMatrix<SolType, Eigen::RowMajor>;
 using Triplet = Eigen::Triplet<SolType>;
 using Vector = Eigen::Vector<SolType, Eigen::Dynamic>;
 
+void downloadEigen(const Vector & src, std::vector<float> & dst)
+{
+    const int n = src.rows();
+    dst.resize(n);
+    for (int i = 0; i < n; i++)
+    {
+        dst[i] = src[i];
+    }
+}
+
 Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
                             const DfgConditions & cond, const float timeStep0, const float maxT)
 {
@@ -244,6 +254,14 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     std::vector<float> tentRhs(2 * velocityMassCsr.rows);
     std::vector<float> tentAcc(2 * velocityMassCsr.rows);
 
+    // ======= Debug dumps =======
+    const std::string dumpDir = "dumps_eigen";
+    const bool dbgDumps = false;
+    std::vector<float> dbgVelocityXy;
+    std::vector<float> dbgPressureRhs;
+    std::vector<float> dbgInternalP;
+    std::vector<float> dbgFullP;
+
     std::cout << "Solving...\n";
     for (int iT = 0; iT <= numTimeSteps; iT++)
     {
@@ -302,6 +320,13 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             tentativeVelocityXy(i + numVelocityNodes) -= tau * tentAcc[2 * i + 1];
             // clang-format on
         }
+
+        if (dbgDumps)
+        {
+            downloadEigen(tentativeVelocityXy, dbgVelocityXy);
+            linalg::write(std::format("{}/{}_tentativeVxy.bin", dumpDir, iT), dbgVelocityXy);
+        }
+
         const auto tTentative = sw.millis(true);
 
         if (false)
@@ -339,6 +364,12 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             pressureRhs[i] = tentativeVelDiv[j];
         }
 
+        if (dbgDumps)
+        {
+            downloadEigen(pressureRhs, dbgPressureRhs);
+            linalg::write(std::format("{}/{}_pressureRhs.bin", dumpDir, iT), dbgPressureRhs);
+        }
+
         Vector pressureInt = pressureStiffnessSolver.solve(pressureRhs);
         assert(pressureInt.rows() == numInternalPressureNodes);
         assert(pressureInt.cols() == 1);
@@ -362,6 +393,14 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         {
             const int j = internalPressureNodes[i];
             pressure[j] = pressureInt[i];
+        }
+
+        if (dbgDumps)
+        {
+            downloadEigen(pressureInt, dbgInternalP);
+            downloadEigen(pressure, dbgFullP);
+            linalg::write(std::format("{}/{}_internalP.bin", dumpDir, iT), dbgInternalP);
+            linalg::write(std::format("{}/{}_fullP.bin", dumpDir, iT), dbgFullP);
         }
 
         if (false)
