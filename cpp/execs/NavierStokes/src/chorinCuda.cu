@@ -7,6 +7,7 @@
 #include <cu/blas.h>
 #include <cu/conjGradF.h>
 #include <cu/csrF.h>
+#include <cu/dssSolver.h>
 #include <cu/sparse.h>
 #include <cu/spmv.h>
 
@@ -73,7 +74,7 @@ struct DirichletVelocity
     }
 };
 
-struct PressureSolver
+struct PressureSolverCg
 {
     cu::Sparse & lib;
     cu::csrF & pressureStiffnessInternal;
@@ -98,9 +99,9 @@ struct PressureSolver
 
     float lastMse;
 
-    PressureSolver(cu::Sparse & lib, cu::csrF & m1,
-                   const int numPressureNodes,
-                   const std::vector<int> & internalPressureIds)
+    PressureSolverCg(cu::Sparse & lib, cu::csrF & m1,
+                     const int numPressureNodes,
+                     const std::vector<int> & internalPressureIds)
         : lib(lib), pressureStiffnessInternal(m1), cg(m1),
           dense(numPressureNodes),
           internalIds(internalPressureIds),
@@ -160,11 +161,97 @@ struct PressureSolver
     }
 };
 
+struct PressureSolverDss
+{
+    cu::Dss & dss;
+    cu::Sparse & lib;
+    cu::DssSolver solver;
+
+    int numAll;
+    int numInternal;
+
+    // Input/output buffer
+    // Before pressure is calculated, this is tentativeVelDiv
+    // After it is calculated, this is the pressure
+    cu::vec<float> dense;
+    cu::vec<int> internalIds;
+
+    cusparseSpVecDescr_t sparseInput;  // values = rhs
+    cusparseSpVecDescr_t sparseOutput; // values = internalPressure
+
+    float lastMse;
+
+    PressureSolverDss(cu::Dss & dss, cu::Sparse & lib,
+                      const linalg::CsrMatrix<float> & m1,
+                      const int numPressureNodes,
+                      const std::vector<int> & internalPressureIds)
+        : dss(dss), lib(lib), 
+          solver(dss, m1, 1, cudssMatrixType_t::CUDSS_MTYPE_SPD),
+          dense(numPressureNodes),
+          internalIds(internalPressureIds)
+    {
+        assert(m1.cols == m1.rows);
+        assert(m1.cols == internalPressureIds.size());
+        numAll = numPressureNodes;
+        numInternal = internalPressureIds.size();
+        assert(numInternal > 0 && numInternal <= numAll);
+
+        auto & rhs = solver.rhs;
+        auto & internalPressure = solver.sol;
+
+        auto rc = cusparseCreateSpVec(&sparseInput, numAll, numInternal,
+                                      internalIds.get(),
+                                      rhs.get(),
+                                      cusparseIndexType_t::CUSPARSE_INDEX_32I,
+                                      cusparseIndexBase_t::CUSPARSE_INDEX_BASE_ZERO,
+                                      cudaDataType::CUDA_R_32F);
+        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
+        {
+            throw std::runtime_error(std::format("cusparseCreateSpVec failed: {}", cusparseGetErrorName(rc)));
+        }
+
+        rc = cusparseCreateSpVec(&sparseOutput, numAll, numInternal,
+                                 internalIds.get(),
+                                 internalPressure.get(),
+                                 cusparseIndexType_t::CUSPARSE_INDEX_32I,
+                                 cusparseIndexBase_t::CUSPARSE_INDEX_BASE_ZERO,
+                                 cudaDataType::CUDA_R_32F);
+        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
+        {
+            throw std::runtime_error(std::format("cusparseCreateSpVec failed: {}", cusparseGetErrorName(rc)));
+        }
+
+        solver.analyze();
+    }
+
+    void update()
+    {
+        auto rc = cusparseGather(lib.handle(), dense.getCuSparseDescriptor(), sparseInput);
+        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
+        {
+            throw std::runtime_error(std::format("cusparseGather failed: {}", cusparseGetErrorName(rc)));
+        }
+
+        // solver.rhs is now updated
+        solver.solve();
+        // solver.sol is now updated
+
+        // Output pressure
+        dense.memsetZero();
+        rc = cusparseScatter(lib.handle(), sparseOutput, dense.getCuSparseDescriptor());
+        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
+        {
+            throw std::runtime_error(std::format("cusparseScatter failed: {}", cusparseGetErrorName(rc)));
+        }
+    }
+};
+
 Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
                            const DfgConditions & cond, const float timeStep0, const float maxT)
 {
     cu::Blas blas;
     cu::Sparse sparse;
+    cu::Dss dss;
 
     float plusOne = 1.0f;
 
@@ -211,8 +298,10 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
 
     // Pressure
     cu::spmv vpdSpmv(sparse.handle(), velocityPressureDiv);
-    PressureSolver pressureSolver(sparse, pressureStiffnessInternal,
-                                  numPressureNodes, ctx.internalPressureNodes);
+    // PressureSolverCg pressureSolver(sparse, pressureStiffnessInternal,
+    //                                 numPressureNodes, ctx.internalPressureNodes);
+    PressureSolverDss pressureSolver(dss, sparse, ctx.pressureStiffnessInternal, 
+                                     numPressureNodes, ctx.internalPressureNodes);
     cu::spmv pvdSpmv(sparse.handle(), pressureVelocityDiv);
     auto & nablaPXy = pvdSpmv.b;
     assert(nablaPXy.size() == 2 * numVelocityNodes);
@@ -230,7 +319,8 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
     const std::string dumpDir = "dumps_cuda";
     const bool dbgDumps = false;
     std::vector<float> dbgVelocityXy(velocityXy.size());
-    std::vector<float> dbgPressureRhs(pressureSolver.rhs.size());
+    // std::vector<float> dbgPressureRhs(pressureSolver.rhs.size());
+    std::vector<float> dbgPressureRhs(pressureSolver.solver.rhs.size());
     std::vector<float> dbgInternalP(ctx.internalPressureNodes.size());
     std::vector<float> dbgFullP(numPressureNodes);
 
@@ -311,7 +401,8 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         const float msePressure = pressureSolver.lastMse;
         if (dbgDumps)
         {
-            pressureSolver.rhs.download(dbgPressureRhs);
+            // pressureSolver.rhs.download(dbgPressureRhs);
+            pressureSolver.solver.rhs.download(dbgPressureRhs);
             linalg::write(std::format("{}/{}_pressureRhs.bin", dumpDir, iT), dbgPressureRhs);
         }
 
@@ -320,7 +411,8 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
 
         if (dbgDumps)
         {
-            pressureSolver.internalPressure.download(dbgInternalP);
+            // pressureSolver.internalPressure.download(dbgInternalP);
+            pressureSolver.solver.sol.download(dbgInternalP);
             pressure.download(dbgFullP);
             linalg::write(std::format("{}/{}_internalP.bin", dumpDir, iT), dbgInternalP);
             linalg::write(std::format("{}/{}_fullP.bin", dumpDir, iT), dbgFullP);
@@ -383,7 +475,6 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
                                  tConvection, tTentative, tPressure, tPressureDownload, tFinal, tFinalDownload);
         std::cout << std::format("\tMSEs: tentX = {}, tentY = {}, pressure = {}, finalX = {}, finalY = {}\n",
                                  mseTentX, mseTentY, msePressure, mseFinalX, mseFinalY);
-
     }
 
     return result;
