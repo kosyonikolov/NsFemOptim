@@ -257,10 +257,16 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
     // ======= Debug dumps =======
     const std::string dumpDir = "dumps_eigen";
     const bool dbgDumps = false;
+    std::vector<float> dbgFinalAccRhs(2 * numVelocityNodes);
     std::vector<float> dbgVelocityXy;
     std::vector<float> dbgPressureRhs;
     std::vector<float> dbgInternalP;
     std::vector<float> dbgFullP;
+
+    if (dbgDumps)
+    {
+        linalg::write(dumpDir + "/velocityMass.bin", velocityMassCsr);
+    }
 
     std::cout << "Solving...\n";
     for (int iT = 0; iT <= numTimeSteps; iT++)
@@ -298,11 +304,10 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             tentRhs[2 * i + 1] = accelRhs(i, 1);
         }
 
-        // if (iT % 100 == 0)
-        // {
-        //     linalg::write(std::format("dump/tent_x_{}.bin", iT), tentAcc);
-        //     linalg::write(std::format("dump/tent_b_{}.bin", iT), tentRhs);
-        // }
+        if (dbgDumps)
+        {
+            linalg::write(std::format("{}/{}_tentativeRhs.bin", dumpDir, iT), tentRhs);
+        }
 
         constexpr double eps = 1e-6;
         linalg::gaussSeidel2ch(velocityMassCsr, tentAcc, tentRhs, 100, eps);
@@ -435,6 +440,16 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             nablaP(i, 1) = nablaPXy(i + numVelocityNodes);
         }
         const auto tCalcNablaP = sw.millis(true);
+
+        if (dbgDumps)
+        {
+            for (int i = 0; i < numVelocityNodes; i++)
+            {
+                dbgFinalAccRhs[2 * i + 0] = nablaP(i, 0);
+                dbgFinalAccRhs[2 * i + 1] = nablaP(i, 1);
+            }
+            linalg::write(std::format("{}/{}_accelFinalRhs.bin", dumpDir, iT), dbgFinalAccRhs);
+        }
 
         Eigen::Matrix<SolType, Eigen::Dynamic, 2> accelFinal = velocityMassSolver.solve(nablaP);
         const auto tSolveFinal = sw.millis(true);
