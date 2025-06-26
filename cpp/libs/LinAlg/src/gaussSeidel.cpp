@@ -1,7 +1,7 @@
 #include <linalg/gaussSeidel.h>
 
 #include <cmath>
-// #include <iostream>
+#include <iostream>
 
 namespace linalg
 {
@@ -94,7 +94,7 @@ namespace linalg
             gaussSeidelStep(m, x, b);
 
             lastRes = m.mse(x, b);
-            // std::cout << std::format("{}: {}\n", i, lastRes);
+            std::cout << std::format("{}: {}\n", i, lastRes);
 
             if (lastRes < eps)
             {
