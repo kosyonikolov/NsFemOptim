@@ -10,7 +10,8 @@
 
 #include <utils/stopwatch.h>
 
-double conjugateGradient(const linalg::CsrMatrix<float> & m, std::vector<float> & x, const std::vector<float> & b,
+template <typename F>
+double conjugateGradient(const linalg::CsrMatrix<F> & m, std::vector<F> & x, const std::vector<F> & b,
                          const int maxIters, const double target)
 {
     const int n = m.cols;
@@ -19,9 +20,9 @@ double conjugateGradient(const linalg::CsrMatrix<float> & m, std::vector<float> 
     assert(n == b.size());
 
     // Work vectors
-    std::vector<float> r(n); // Residuals
-    std::vector<float> p(n); // Direction
-    std::vector<float> d(n); // M * p
+    std::vector<F> r(n); // Residuals
+    std::vector<F> p(n); // Direction
+    std::vector<F> d(n); // M * p
 
     // Init: r = b - Mx
     auto initR = [&]()
@@ -108,6 +109,35 @@ std::vector<float> cg(const linalg::CsrMatrix<float> & m, const std::vector<floa
     return x;
 }
 
+template<typename Dst, typename Src>
+std::vector<Dst> convert(const std::vector<Src> & v)
+{
+    std::vector<Dst> result(v.size());
+    for (size_t i = 0; i < v.size(); i++)
+    {
+        result[i] = v[i];
+    }
+    return result;
+} 
+
+std::vector<float> cgd(const linalg::CsrMatrix<float> & m, const std::vector<float> & rhs,
+                       const int maxIters, const float eps)
+{
+    linalg::CsrMatrix<double> mD;
+    mD.rows = m.rows;
+    mD.cols = m.cols;
+    mD.rowStart = m.rowStart;
+    mD.column = m.column;
+    mD.values = convert<double>(m.values);
+
+    std::vector<double> rhsD = convert<double>(rhs);
+    std::vector<double> xD(rhs.size(), 0);
+    conjugateGradient(mD, xD, rhsD, maxIters, eps);
+
+    std::vector<float> x = convert<float>(xD);
+    return x;
+}
+
 std::vector<std::vector<float>> splitChannels(const std::vector<float> & src, const int numCh)
 {
     const int n = src.size() / numCh;
@@ -177,6 +207,10 @@ int main(int argc, char ** argv)
     else if (algo == "cg")
     {
         theAlgo = cg;
+    }
+    else if (algo == "cgd")
+    {
+        theAlgo = cgd;
     }
 
     if (!theAlgo)
