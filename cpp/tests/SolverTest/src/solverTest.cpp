@@ -11,6 +11,8 @@
 #include <linalg/jacobi.h>
 #include <linalg/vectors.h>
 
+#include <cu/gaussSeidelHost.h>
+
 #include <utils/stopwatch.h>
 
 template <typename F>
@@ -101,6 +103,17 @@ std::vector<float> gaussSeidel(const linalg::CsrMatrix<float> & m, const std::ve
 {
     std::vector<float> x(rhs.size(), 0);
     linalg::gaussSeidel(m, x, rhs, maxIters, eps);
+    return x;
+}
+
+std::vector<float> gaussSeidelCuda(const linalg::CsrMatrix<float> & m, const std::vector<float> & rhs,
+                                   const int maxIters, const float eps)
+{
+    cu::GaussSeidelHost gs(m);
+
+    std::vector<float> x(rhs.size(), 0);
+    gs.solve(rhs, x, maxIters, eps);
+
     return x;
 }
 
@@ -195,44 +208,6 @@ int main(int argc, char ** argv)
     }
     std::cout << "Number of channels = " << numCh << "\n";
 
-    u::Stopwatch sw;
-    auto graph = linalg::buildCsrGraph(m);
-    const auto tGraph = sw.millis();
-    std::vector<int> order(n);
-    std::iota(order.begin(), order.end(), 0);
-    std::vector<std::vector<int>> coloring;
-
-    sw.reset();
-    auto slOrder = linalg::buildSmallestLastOrdering(graph);
-    const auto tSlOrder = sw.millis(true);
-    coloring = linalg::partitionGraphGreedy(graph, order);
-    const auto tGreedy = sw.millis();
-    std::cout << "Times: graph = " << tGraph << ", slOrder = " << tSlOrder << ", greedy = " << tGreedy << "\n";
-    std::cout << "Number of partitions: " << coloring.size() << "\n";
-    for (int i = 0; i < coloring.size(); i++)
-    {
-        std::cout << i << ": " << coloring[i].size() << "\n";
-    }
-
-    bool ok = linalg::verifyColoring(graph, coloring);
-    std::cout << "Coloring ok = " << ok << "\n";
-
-    std::default_random_engine rng(std::random_device{}());
-    const int nAttempts = 5;
-    for (int i = 0; i < nAttempts; i++)
-    {
-        std::cout << "===== Partition attempt " << i << " =====\n";
-        std::shuffle(order.begin(), order.end(), rng);
-        coloring = linalg::partitionGraphGreedy(graph, order);
-        std::cout << "Number of partitions: " << coloring.size() << "\n";
-        for (int i = 0; i < coloring.size(); i++)
-        {
-            std::cout << i << ": " << coloring[i].size() << "\n";
-        }
-        bool ok = linalg::verifyColoring(graph, coloring);
-        std::cout << "Coloring ok = " << ok << "\n";
-    }
-
     auto channels = splitChannels(rhs, numCh);
 
     using AlgoFn = std::vector<float> (*)(const linalg::CsrMatrix<float> &, const std::vector<float> &, const int, const float);
@@ -240,6 +215,10 @@ int main(int argc, char ** argv)
     if (algo == "gs")
     {
         theAlgo = gaussSeidel;
+    }
+    else if (algo == "gsCuda")
+    {
+        theAlgo = gaussSeidelCuda;
     }
     else if (algo == "jacobi")
     {
