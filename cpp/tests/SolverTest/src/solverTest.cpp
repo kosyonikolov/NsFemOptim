@@ -15,6 +15,8 @@
 
 #include <utils/stopwatch.h>
 
+using AlgoFn = std::vector<float> (*)(const linalg::CsrMatrix<float> &, const std::vector<float> &, const int, const float);
+
 template <typename F>
 double conjugateGradient(const linalg::CsrMatrix<F> & m, std::vector<F> & x, const std::vector<F> & b,
                          const int maxIters, const double target)
@@ -175,6 +177,18 @@ std::vector<std::vector<float>> splitChannels(const std::vector<float> & src, co
     return result;
 }
 
+AlgoFn selectAlgo(const std::string & name)
+{
+    #define RETIF(x) if (name == #x) return x;
+    RETIF(cg);
+    RETIF(cgd);
+    RETIF(gaussSeidel);
+    RETIF(gaussSeidelCuda);
+    RETIF(jacobi);
+    #undef RETIF
+    return 0;
+}
+
 int main(int argc, char ** argv)
 {
     const std::string usageMsg = "./SolverTest <algo> <matrix> <rhs>";
@@ -184,7 +198,7 @@ int main(int argc, char ** argv)
         return 1;
     }
 
-    const std::string algo = argv[1];
+    const std::string algoName = argv[1];
     const std::string matFname = argv[2];
     const std::string rhsFname = argv[3];
 
@@ -210,32 +224,10 @@ int main(int argc, char ** argv)
 
     auto channels = splitChannels(rhs, numCh);
 
-    using AlgoFn = std::vector<float> (*)(const linalg::CsrMatrix<float> &, const std::vector<float> &, const int, const float);
-    AlgoFn theAlgo = 0;
-    if (algo == "gs")
+    AlgoFn algo = selectAlgo(algoName);
+    if (!algo)
     {
-        theAlgo = gaussSeidel;
-    }
-    else if (algo == "gsCuda")
-    {
-        theAlgo = gaussSeidelCuda;
-    }
-    else if (algo == "jacobi")
-    {
-        theAlgo = jacobi;
-    }
-    else if (algo == "cg")
-    {
-        theAlgo = cg;
-    }
-    else if (algo == "cgd")
-    {
-        theAlgo = cgd;
-    }
-
-    if (!theAlgo)
-    {
-        std::cerr << "No algorithm matching " << algo << "\n";
+        std::cerr << "No algorithm matching " << algoName << "\n";
         return 1;
     }
 
@@ -247,7 +239,7 @@ int main(int argc, char ** argv)
     {
         std::cout << "================ Channel " << c << " ================\n";
         auto & currRhs = channels[c];
-        x = theAlgo(m, currRhs, maxIters, eps);
+        x = algo(m, currRhs, maxIters, eps);
         const double mse = m.mse(x, currRhs);
         std::cout << "Final MSE = " << mse << "\n";
     }
