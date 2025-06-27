@@ -1,11 +1,14 @@
 #include <cassert>
 #include <iostream>
+#include <numeric>
 #include <string>
 #include <vector>
+#include <random>
 
-#include <linalg/jacobi.h>
 #include <linalg/gaussSeidel.h>
+#include <linalg/graphs.h>
 #include <linalg/io.h>
+#include <linalg/jacobi.h>
 #include <linalg/vectors.h>
 
 #include <utils/stopwatch.h>
@@ -85,7 +88,7 @@ double conjugateGradient(const linalg::CsrMatrix<F> & m, std::vector<F> & x, con
 }
 
 std::vector<float> jacobi(const linalg::CsrMatrix<float> & m, const std::vector<float> & rhs,
-                               const int maxIters, const float eps)
+                          const int maxIters, const float eps)
 {
     std::vector<float> x(rhs.size(), 0);
     std::vector<float> aux(rhs.size());
@@ -109,7 +112,7 @@ std::vector<float> cg(const linalg::CsrMatrix<float> & m, const std::vector<floa
     return x;
 }
 
-template<typename Dst, typename Src>
+template <typename Dst, typename Src>
 std::vector<Dst> convert(const std::vector<Src> & v)
 {
     std::vector<Dst> result(v.size());
@@ -118,7 +121,7 @@ std::vector<Dst> convert(const std::vector<Src> & v)
         result[i] = v[i];
     }
     return result;
-} 
+}
 
 std::vector<float> cgd(const linalg::CsrMatrix<float> & m, const std::vector<float> & rhs,
                        const int maxIters, const float eps)
@@ -192,9 +195,47 @@ int main(int argc, char ** argv)
     }
     std::cout << "Number of channels = " << numCh << "\n";
 
+    u::Stopwatch sw;
+    auto graph = linalg::buildCsrGraph(m);
+    const auto tGraph = sw.millis();
+    std::vector<int> order(n);
+    std::iota(order.begin(), order.end(), 0);
+    std::vector<std::vector<int>> coloring;
+
+    sw.reset();
+    auto slOrder = linalg::buildSmallestLastOrdering(graph);
+    const auto tSlOrder = sw.millis(true);
+    coloring = linalg::partitionGraphGreedy(graph, order);
+    const auto tGreedy = sw.millis();
+    std::cout << "Times: graph = " << tGraph << ", slOrder = " << tSlOrder << ", greedy = " << tGreedy << "\n";
+    std::cout << "Number of partitions: " << coloring.size() << "\n";
+    for (int i = 0; i < coloring.size(); i++)
+    {
+        std::cout << i << ": " << coloring[i].size() << "\n";
+    }
+
+    bool ok = linalg::verifyColoring(graph, coloring);
+    std::cout << "Coloring ok = " << ok << "\n";
+
+    std::default_random_engine rng(std::random_device{}());
+    const int nAttempts = 5;
+    for (int i = 0; i < nAttempts; i++)
+    {
+        std::cout << "===== Partition attempt " << i << " =====\n";
+        std::shuffle(order.begin(), order.end(), rng);
+        coloring = linalg::partitionGraphGreedy(graph, order);
+        std::cout << "Number of partitions: " << coloring.size() << "\n";
+        for (int i = 0; i < coloring.size(); i++)
+        {
+            std::cout << i << ": " << coloring[i].size() << "\n";
+        }
+        bool ok = linalg::verifyColoring(graph, coloring);
+        std::cout << "Coloring ok = " << ok << "\n";
+    }
+
     auto channels = splitChannels(rhs, numCh);
 
-    using AlgoFn = std::vector<float>(*)(const linalg::CsrMatrix<float> &, const std::vector<float> &, const int, const float);
+    using AlgoFn = std::vector<float> (*)(const linalg::CsrMatrix<float> &, const std::vector<float> &, const int, const float);
     AlgoFn theAlgo = 0;
     if (algo == "gs")
     {

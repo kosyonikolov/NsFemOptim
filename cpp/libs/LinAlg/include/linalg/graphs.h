@@ -7,6 +7,13 @@
 
 namespace linalg
 {
+    bool verifyColoring(const std::vector<std::vector<int>> & graph, const std::vector<std::vector<int>> & coloring);
+
+    std::vector<int> buildSmallestLastOrdering(const std::vector<std::vector<int>> & graph);
+
+    std::vector<std::vector<int>> partitionGraphGreedy(const std::vector<std::vector<int>> & graph,
+                                                       const std::vector<int> & order);
+
     std::vector<std::vector<int>> partitionGraphDSatur(const std::vector<std::vector<int>> & graph);
 
     template <typename F>
