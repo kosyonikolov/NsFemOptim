@@ -4,6 +4,8 @@
 #include <stdexcept>
 #include <iostream>
 
+#include <utils/stopwatch.h>
+
 namespace cu
 {
     ConjugateGradientF::ConjugateGradientF(csrF & mat)
@@ -65,8 +67,10 @@ namespace cu
             return lastMse;
         }
 
+        u::Stopwatch bigSw;
         for (int iter = 0; iter < maxIters; iter++)
         {
+            bigSw.reset();
             // m.rMult(p, d);
             spmv.compute();
 
@@ -105,7 +109,6 @@ namespace cu
                 throw std::runtime_error(std::format("cublasSdot failed: {}", cublasGetStatusName(blasRc)));
             }
             const double currMse = std::sqrt(dotR1 / n);
-            // std::cout << "[CGF] " << iter << ": " << currMse << "\n";
             lastMse = currMse;
 
             // Check for convergence
@@ -134,6 +137,9 @@ namespace cu
             // }
 
             dotR0 = dotR1;
+
+            const auto tIter = bigSw.millis();
+            std::cout << iter << ": " << currMse << " (iter = " << tIter << " ms)\n";
         }
 
         return lastMse;

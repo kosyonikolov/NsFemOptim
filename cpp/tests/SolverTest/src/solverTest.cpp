@@ -1,7 +1,5 @@
 #include <cassert>
 #include <iostream>
-#include <numeric>
-#include <random>
 #include <string>
 #include <vector>
 
@@ -12,6 +10,7 @@
 #include <linalg/vectors.h>
 
 #include <cu/gaussSeidelHost.h>
+#include <cu/conjGradHost.h>
 
 #include <utils/stopwatch.h>
 
@@ -159,6 +158,17 @@ std::vector<float> cg(const linalg::CsrMatrix<float> & m, const std::vector<floa
     return x;
 }
 
+std::vector<float> cgCuda(const linalg::CsrMatrix<float> & m, const std::vector<float> & rhs,
+                          const int maxIters, const float eps)
+{
+    cu::ConjGradHost cg(m);
+
+    std::vector<float> x(rhs.size(), 0);
+    cg.solve(rhs, x, maxIters, eps);
+
+    return x;
+}
+
 template <typename Dst, typename Src>
 std::vector<Dst> convert(const std::vector<Src> & v)
 {
@@ -215,6 +225,7 @@ AlgoFn selectAlgo(const std::string & name)
     if (name == #x) \
         return x;
     RETIF(cg);
+    RETIF(cgCuda);
     RETIF(cgd);
     RETIF(gaussSeidel);
     RETIF(gaussSeidelCuda);
@@ -266,7 +277,7 @@ int main(int argc, char ** argv)
         return 1;
     }
 
-    const int maxIters = 100;
+    const int maxIters = 200;
     const float eps = 1e-9;
 
     std::vector<float> x;

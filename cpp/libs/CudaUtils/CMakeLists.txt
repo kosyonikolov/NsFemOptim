@@ -3,7 +3,8 @@ add_library(CudaUtils src/sparse.cu src/vec.cu src/csrF.cu src/spmv.cu
                       src/dss.cu src/dssSolver.cu
                       src/gaussSeidel.cu
                       src/gaussSeidelHost.cu
-                      src/stopwatch.cu)
+                      src/stopwatch.cu
+                      src/conjGradHost.cu)
 target_include_directories(CudaUtils PUBLIC include/)
 target_link_libraries(CudaUtils PUBLIC Utils LinAlg)
 
