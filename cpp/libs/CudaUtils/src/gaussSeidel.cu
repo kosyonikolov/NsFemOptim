@@ -6,6 +6,10 @@
 
 #include <linalg/graphs.h>
 
+#include <utils/stopwatch.h>
+
+#include <cu/stopwatch.h>
+
 namespace cu
 {
     // Perform a step of the Gauss-Seidel algorithm on a partition of the system Mx = b
@@ -99,8 +103,13 @@ namespace cu
             }
         }
 
+        Stopwatch sw;
+        u::Stopwatch bigSw;
         for (int iter = 0; iter < maxIters; iter++)
         {
+            bigSw.reset();
+            sw.reset();
+
             // Perform the updates
             for (int p = 0; p < nParts; p++)
             {
@@ -116,6 +125,8 @@ namespace cu
                                                                   coloring.get() + j0, pSize);
             }
 
+            const auto tGs = sw.millis(true);
+
             // auto rc = cudaStreamSynchronize(0);
 
             // Calculate MSE
@@ -130,9 +141,14 @@ namespace cu
             {
                 throw std::runtime_error(std::format("cublasSnrm2 failed: {}", cublasGetStatusName(rc)));
             }
+
+            const auto tMse = sw.millis();
+
             const float mse = norm2 / std::sqrt(n);
             lastMse = mse;
-            std::cout << iter << ": " << mse << "\n";
+
+            const auto tIter = bigSw.millis();
+            std::cout << iter << ": " << mse << " (gs = " << tGs << " ms, mse = " << tMse << " ms, total = " << tIter << " ms)\n";
             if (mse < target)
             {
                 break;
