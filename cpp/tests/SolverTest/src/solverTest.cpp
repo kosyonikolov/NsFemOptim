@@ -1,9 +1,9 @@
 #include <cassert>
 #include <iostream>
 #include <numeric>
+#include <random>
 #include <string>
 #include <vector>
-#include <random>
 
 #include <linalg/gaussSeidel.h>
 #include <linalg/graphs.h>
@@ -108,6 +108,38 @@ std::vector<float> gaussSeidel(const linalg::CsrMatrix<float> & m, const std::ve
     return x;
 }
 
+// Uses the coloring order of the CUDA version
+std::vector<float> gaussSeidelCustom(const linalg::CsrMatrix<float> & m, const std::vector<float> & rhs,
+                                     const int maxIters, const float eps)
+{
+    assert(m.cols == m.rows);
+    const int n = m.cols;
+
+    // Create a coloring of the matrix
+    // Use the smallest-last ordering for now - it seems to produce good results
+    auto graph = linalg::buildCsrGraph(m);
+    assert(graph.size() == n);
+    auto slOrder = linalg::buildSmallestLastOrdering(graph);
+    auto parts = linalg::partitionGraphGreedy(graph, slOrder);
+
+    const int nColors = parts.size();
+
+    // Sort the individual partitions and place them in the coloring vector
+    std::vector<int> cpuColoring(n);
+    int i = 0;
+    for (int c = 0; c < nColors; c++)
+    {
+        auto & p = parts[c];
+        std::sort(p.begin(), p.end());
+        std::copy_n(p.begin(), p.size(), cpuColoring.begin() + i);
+        i += p.size();
+    }
+
+    std::vector<float> x(rhs.size(), 0);
+    linalg::gaussSeidelCustomOrder(m, x, rhs, cpuColoring, maxIters, eps);
+    return x;
+}
+
 std::vector<float> gaussSeidelCuda(const linalg::CsrMatrix<float> & m, const std::vector<float> & rhs,
                                    const int maxIters, const float eps)
 {
@@ -179,13 +211,16 @@ std::vector<std::vector<float>> splitChannels(const std::vector<float> & src, co
 
 AlgoFn selectAlgo(const std::string & name)
 {
-    #define RETIF(x) if (name == #x) return x;
+#define RETIF(x)    \
+    if (name == #x) \
+        return x;
     RETIF(cg);
     RETIF(cgd);
     RETIF(gaussSeidel);
     RETIF(gaussSeidelCuda);
+    RETIF(gaussSeidelCustom);
     RETIF(jacobi);
-    #undef RETIF
+#undef RETIF
     return 0;
 }
 

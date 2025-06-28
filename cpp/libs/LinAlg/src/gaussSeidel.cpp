@@ -6,6 +6,33 @@
 namespace linalg
 {
     template <typename F>
+    void gaussSeidelStepCustomOrder(const CsrMatrix<F> & m, F * x, const F * b,
+                                    const int * order)
+    {
+        const int nRows = m.rows;
+        for (int k = 0; k < nRows; k++)
+        {
+            const int i = order[k];
+            const int j1 = m.rowStart[i + 1];
+            F diag = 0; // element at (i, i)
+            double negSum = 0;
+            for (int j = m.rowStart[i]; j < j1; j++)
+            {
+                const int col = m.column[j];
+                if (col == i)
+                {
+                    diag = m.values[j];
+                }
+                else
+                {
+                    negSum += m.values[j] * x[col];
+                }
+            }
+            x[i] = (b[i] - negSum) / diag;
+        }
+    }
+
+    template <typename F>
     void gaussSeidelStep(const CsrMatrix<F> & m, F * x, const F * b)
     {
         const int nRows = m.rows;
@@ -105,6 +132,27 @@ namespace linalg
     }
 
     template <typename F>
+    double gaussSeidelCustomOrder(const CsrMatrix<F> & m, F * x, const F * b,
+                                  const int * order,
+                                  const int maxIters, const double eps)
+    {
+        double lastRes = -1;
+        for (int i = 0; i < maxIters; i++)
+        {
+            gaussSeidelStepCustomOrder(m, x, b, order);
+
+            lastRes = m.mse(x, b);
+            std::cout << std::format("{}: {}\n", i, lastRes);
+
+            if (lastRes < eps)
+            {
+                break;
+            }
+        }
+        return lastRes;
+    }
+
+    template <typename F>
     std::tuple<double, double> gaussSeidel2ch(const CsrMatrix<F> & m, F * x, const F * b,
                                               const int maxIters, const double eps)
     {
@@ -124,6 +172,9 @@ namespace linalg
 
     template double gaussSeidel(const CsrMatrix<float> & m, float * x, const float * b, const int maxIters, const double eps);
     template double gaussSeidel(const CsrMatrix<double> & m, double * x, const double * b, const int maxIters, const double eps);
+
+    template double gaussSeidelCustomOrder(const CsrMatrix<float> & m, float * x, const float * b,
+                                           const int * order, const int maxIters, const double eps);
 
     template void mse2ch(const CsrMatrix<float> & m, float * x, const float * b, double & mse0, double & mse1);
     template void mse2ch(const CsrMatrix<double> & m, double * x, const double * b, double & mse0, double & mse1);

@@ -82,7 +82,7 @@ namespace cu
         const int nParts = partitionStart.size() - 1;
         std::vector<dim3> blockSize(nParts);
         std::vector<dim3> gridSize(nParts);
-        constexpr int maxThreads = 256;
+        constexpr int maxThreads = 512;
         for (int p = 0; p < nParts; p++)
         {
             const int pSize = partitionStart[p + 1] - partitionStart[p];
