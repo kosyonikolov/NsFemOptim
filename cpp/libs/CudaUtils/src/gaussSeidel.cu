@@ -4,6 +4,7 @@
 #include <cassert>
 #include <stdexcept>
 
+#include <linalg/gaussSeidel.h>
 #include <linalg/graphs.h>
 
 #include <utils/stopwatch.h>
@@ -44,12 +45,45 @@ namespace cu
         }
     }
 
+    // Perform a step of the Gauss-Seidel algorithm on a partition of the system Mx = b
+    // M is a square CSR matrix with  described by values, column and rowStart
+    // The sparse structure contains NO diagonal elements
+    // Insteady their multiplicative inverses are in invDiag
+    // The rows which are updated are given by (partition, partitionSize)
+    __global__ void gaussSeidelStepPartitionInvDiag(float * x, const float * b, const float * invDiag,
+                                                    const float * values, const int * column, const int * rowStart,
+                                                    const int * partition, const int partitionSize)
+    {
+        int i0 = blockIdx.x * blockDim.x + threadIdx.x;
+        const int stride = blockDim.x * gridDim.x;
+        for (int i = i0; i < partitionSize; i += stride)
+        {
+            const int row = partition[i];
+            const int j1 = rowStart[row + 1];
+            float negSum = 0;
+            for (int j = rowStart[row]; j < j1; j++)
+            {
+                const int col = column[j];
+                // col is never equal to row
+                negSum += values[j] * x[col];
+            }
+            x[row] = (b[row] - negSum) * invDiag[row];
+        }
+    }
+
     GaussSeidel::GaussSeidel(cu::Blas & blas, cusparseHandle_t sparseHandle, const linalg::CsrMatrix<float> & cpuMatrix)
         : blas(blas), m(cpuMatrix), mSpmv(sparseHandle, m),
           coloring(cpuMatrix.cols), rhs(cpuMatrix.cols), sol(cpuMatrix.cols)
     {
         assert(cpuMatrix.cols == cpuMatrix.rows);
         const int n = cpuMatrix.cols;
+
+        // Create a stripped matrix (no diagonal) and the inverted diagonal
+        auto ctx = linalg::buildGaussSeidelContext(cpuMatrix);
+        invDiag.overwriteUpload(ctx.invDiag);
+        values.overwriteUpload(ctx.stripped.values);
+        column.overwriteUpload(ctx.stripped.column);
+        rowStart.overwriteUpload(ctx.stripped.rowStart);
 
         // Create a coloring of the matrix
         // Use the smallest-last ordering for now - it seems to produce good results
@@ -120,9 +154,12 @@ namespace cu
                 // Send it
                 const dim3 currGrid = gridSize[p];
                 const dim3 currBlock = blockSize[p];
-                gaussSeidelStepPartition<<<currGrid, currBlock>>>(sol.get(), rhs.get(),
-                                                                  m.values.get(), m.column.get(), m.rowStart.get(),
-                                                                  coloring.get() + j0, pSize);
+                // gaussSeidelStepPartition<<<currGrid, currBlock>>>(sol.get(), rhs.get(),
+                //                                                   m.values.get(), m.column.get(), m.rowStart.get(),
+                //                                                   coloring.get() + j0, pSize);
+                gaussSeidelStepPartitionInvDiag<<<currGrid, currBlock>>>(sol.get(), rhs.get(), invDiag.get(),
+                                                                         values.get(), column.get(), rowStart.get(),
+                                                                         coloring.get() + j0, pSize);
             }
 
             const auto tGs = sw.millis(true);

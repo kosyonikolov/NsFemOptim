@@ -5,6 +5,65 @@
 
 namespace linalg
 {
+    template<typename F>
+    GaussSeidelContext<F> buildGaussSeidelContext(const CsrMatrix<F> & m)
+    {
+        const int n = m.cols;
+        if (n != m.rows)
+        {
+            throw std::invalid_argument("buildGaussSeidelContext: Matrix must be square");
+        }
+
+        GaussSeidelContext<F> result;
+        result.stripped = m;
+        result.invDiag.resize(n, 0);
+
+        auto & values = result.stripped.values;
+        auto & column = result.stripped.column;
+        auto & rowStart = result.stripped.rowStart;
+        auto & invDiag = result.invDiag;
+
+        int s = 0; // Survivor index in values/column
+        for (int row = 0; row < n; row++)
+        {
+            bool diagFound = false;
+            rowStart[row] = s;
+            const int j0 = m.rowStart[row];
+            const int j1 = m.rowStart[row + 1];
+            for (int j = j0; j < j1; j++)
+            {
+                const int col = m.column[j];
+                const F val = m.values[j];
+                if (col == row)
+                {
+                    if (val == 0)
+                    {
+                        throw std::invalid_argument("Matrix contains zeros on the diagonal");
+                    }
+                    invDiag[row] = 1.0f / val;
+                    diagFound = true;
+                }
+                else
+                {
+                    column[s] = col;
+                    values[s] = val;
+                    s++;
+                }
+            }
+
+            if (!diagFound)
+            {
+                throw std::invalid_argument("Matrix has missing diagonal elements!");
+            }
+        }
+
+        values.resize(s);
+        column.resize(s);
+        rowStart.back() = s;
+
+        return result;
+    }
+
     template <typename F>
     void gaussSeidelStepCustomOrder(const CsrMatrix<F> & m, F * x, const F * b,
                                     const int * order)
@@ -169,6 +228,8 @@ namespace linalg
         }
         return {lastRes0, lastRes1};
     }
+
+    template GaussSeidelContext<float> buildGaussSeidelContext(const CsrMatrix<float> & m);
 
     template double gaussSeidel(const CsrMatrix<float> & m, float * x, const float * b, const int maxIters, const double eps);
     template double gaussSeidel(const CsrMatrix<double> & m, double * x, const double * b, const int maxIters, const double eps);

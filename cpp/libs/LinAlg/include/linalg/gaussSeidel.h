@@ -6,6 +6,16 @@
 namespace linalg
 {
     template <typename F>
+    struct GaussSeidelContext
+    {
+        CsrMatrix<F> stripped; // Matrix without diagonal elements
+        std::vector<F> invDiag; // 1.0 / diag
+    };
+
+    template<typename F>
+    GaussSeidelContext<F> buildGaussSeidelContext(const CsrMatrix<F> & m); 
+
+    template <typename F>
     double gaussSeidel(const CsrMatrix<F> & m, F * x, const F * b,
                        const int maxIters, const double eps);
 

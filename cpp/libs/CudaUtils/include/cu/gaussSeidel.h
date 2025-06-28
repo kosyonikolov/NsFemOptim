@@ -16,6 +16,12 @@ namespace cu
         csrF m;
         spmv mSpmv;
 
+        // Stripped matrix + inverted diagonal
+        cu::vec<float> values;
+        cu::vec<float> invDiag;
+        cu::vec<int> column;
+        cu::vec<int> rowStart;
+        
         std::vector<int> cpuColoring;
         cu::vec<int> coloring;
 
