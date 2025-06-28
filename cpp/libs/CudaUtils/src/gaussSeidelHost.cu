@@ -21,10 +21,10 @@ namespace cu
                                  const int maxIters, const float target)
     {
         assert(rhs.size() == sol.size());
-        cudaGs->rhs.upload(rhs);
-        cudaGs->sol.upload(sol);
+        cudaGs->ioRhs.upload(rhs);
+        cudaGs->ioSol.upload(sol);
         const float mse = cudaGs->solve(maxIters, target);
-        cudaGs->sol.download(sol);
+        cudaGs->ioSol.download(sol);
         return mse;
     }
 } // namespace cu

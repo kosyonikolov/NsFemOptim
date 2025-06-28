@@ -1,6 +1,8 @@
 #ifndef LIBS_CUDAUTILS_INCLUDE_CU_GAUSSSEIDEL
 #define LIBS_CUDAUTILS_INCLUDE_CU_GAUSSSEIDEL
 
+#include <memory>
+
 #include <linalg/csrMatrix.h>
 
 #include <cu/csrF.h>
@@ -13,8 +15,8 @@ namespace cu
     {
         cu::Blas & blas;
 
-        csrF m;
-        spmv mSpmv;
+        std::unique_ptr<csrF> m; // reordered
+        std::unique_ptr<spmv> mSpmv;
 
         // Stripped matrix + inverted diagonal
         cu::vec<float> values;
@@ -27,11 +29,15 @@ namespace cu
 
         std::vector<int> partitionStart; // size = numColors + 1, last element is a sentinel (== coloring.size())
 
+        // Internal reordered vectors
+        cu::vec<float> rhs;        
+        cu::vec<float> sol;
+
     public:
         // Input/output vectors
         // Do not reallocate!
-        cu::vec<float> rhs;        
-        cu::vec<float> sol;
+        cu::vec<float> ioRhs;        
+        cu::vec<float> ioSol;
 
         GaussSeidel(cu::Blas & blas, cusparseHandle_t sparseHandle, const linalg::CsrMatrix<float> & cpuMatrix);
 

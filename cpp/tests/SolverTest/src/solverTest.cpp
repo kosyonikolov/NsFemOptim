@@ -277,7 +277,7 @@ int main(int argc, char ** argv)
         return 1;
     }
 
-    const int maxIters = 200;
+    const int maxIters = 100;
     const float eps = 1e-9;
 
     std::vector<float> x;

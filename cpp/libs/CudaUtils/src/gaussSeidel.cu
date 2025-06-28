@@ -71,19 +71,60 @@ namespace cu
         }
     }
 
+    __global__ void reorderXbFwd(const float * srcX, const float * srcB,
+                                 float * dstX, float * dstB,
+                                 const int * coloring, const int n)
+    {
+        int i0 = blockIdx.x * blockDim.x + threadIdx.x;
+        const int stride = blockDim.x * gridDim.x;
+        for (int i = i0; i < n; i += stride)
+        {
+            const int j = coloring[i];
+            dstX[i] = srcX[j];
+            dstB[i] = srcB[j];
+        }
+    }
+
+    __global__ void reorderXInv(const float * srcX, float * dstX,
+                                const int * coloring, const int n)
+    {
+        int i0 = blockIdx.x * blockDim.x + threadIdx.x;
+        const int stride = blockDim.x * gridDim.x;
+        for (int i = i0; i < n; i += stride)
+        {
+            const int j = coloring[i];
+            dstX[j] = srcX[i];
+        }
+    }
+
+    __global__ void gaussSeidelStepPartitionInvDiagR(float * x, const float * b, const float * invDiag,
+                                                     const float * values, const int * column, const int * rowStart,
+                                                     const int partitionStart, const int partitionEnd)
+    {
+        int row0 = partitionStart + blockIdx.x * blockDim.x + threadIdx.x;
+        const int stride = blockDim.x * gridDim.x;
+        for (int row = row0; row < partitionEnd; row += stride)
+        {
+            const int j1 = rowStart[row + 1];
+            float negSum = 0;
+            for (int j = rowStart[row]; j < j1; j++)
+            {
+                const int col = column[j];
+                // col is never equal to row
+                negSum += values[j] * x[col];
+            }
+            x[row] = (b[row] - negSum) * invDiag[row];
+        }
+    }
+
     GaussSeidel::GaussSeidel(cu::Blas & blas, cusparseHandle_t sparseHandle, const linalg::CsrMatrix<float> & cpuMatrix)
-        : blas(blas), m(cpuMatrix), mSpmv(sparseHandle, m),
-          coloring(cpuMatrix.cols), rhs(cpuMatrix.cols), sol(cpuMatrix.cols)
+        : blas(blas),
+          coloring(cpuMatrix.cols),
+          rhs(cpuMatrix.cols), sol(cpuMatrix.cols),
+          ioRhs(cpuMatrix.cols), ioSol(cpuMatrix.cols)
     {
         assert(cpuMatrix.cols == cpuMatrix.rows);
         const int n = cpuMatrix.cols;
-
-        // Create a stripped matrix (no diagonal) and the inverted diagonal
-        auto ctx = linalg::buildGaussSeidelContext(cpuMatrix);
-        invDiag.overwriteUpload(ctx.invDiag);
-        values.overwriteUpload(ctx.stripped.values);
-        column.overwriteUpload(ctx.stripped.column);
-        rowStart.overwriteUpload(ctx.stripped.rowStart);
 
         // Create a coloring of the matrix
         // Use the smallest-last ordering for now - it seems to produce good results
@@ -108,19 +149,46 @@ namespace cu
             i += p.size();
         }
 
+        // Reorder the matrix to make the coloring redundant -
+        // first partition is [0, P1), second is [P1, P2) and so on
+        auto reordered = cpuMatrix.slice(cpuColoring, cpuColoring);
+
+        // Upload the reordered matrix
+        m = std::make_unique<csrF>(reordered);
+        mSpmv = std::make_unique<spmv>(sparseHandle, *m);
+
+        // Create a stripped matrix (no diagonal) and the inverted diagonal
+        auto ctx = linalg::buildGaussSeidelContext(reordered);
+        invDiag.overwriteUpload(ctx.invDiag);
+        values.overwriteUpload(ctx.stripped.values);
+        column.overwriteUpload(ctx.stripped.column);
+        rowStart.overwriteUpload(ctx.stripped.rowStart);
+
         // Upload the coloring
         coloring.upload(cpuColoring);
     }
 
     float GaussSeidel::solve(const int maxIters, const float target)
     {
-        float lastMse = -1;
+        constexpr int maxThreads = 512;
+        const int n = coloring.size();
+        dim3 reorderBlockSize, reorderGridSize;
+        if (n <= maxThreads)
+        {
+            reorderBlockSize = dim3(n);
+            reorderGridSize = dim3(1);
+        }
+        else
+        {
+            const int nB = (n + maxThreads - 1) / maxThreads;
+            reorderBlockSize = dim3(maxThreads);
+            reorderGridSize = dim3(nB);
+        }
 
         // Calculate block and grid sizes for each partition
         const int nParts = partitionStart.size() - 1;
         std::vector<dim3> blockSize(nParts);
         std::vector<dim3> gridSize(nParts);
-        constexpr int maxThreads = 512;
         for (int p = 0; p < nParts; p++)
         {
             const int pSize = partitionStart[p + 1] - partitionStart[p];
@@ -137,6 +205,13 @@ namespace cu
             }
         }
 
+        // Reorder the IO vectors
+        reorderXbFwd<<<reorderGridSize, reorderBlockSize>>>(ioSol.get(), ioRhs.get(),
+                                                            sol.get(), rhs.get(),
+                                                            coloring.get(), n);
+
+        float lastMse = -1;
+
         Stopwatch sw;
         u::Stopwatch bigSw;
         for (int iter = 0; iter < maxIters; iter++)
@@ -149,7 +224,6 @@ namespace cu
             {
                 const int j0 = partitionStart[p];
                 const int j1 = partitionStart[p + 1];
-                const int pSize = j1 - j0;
 
                 // Send it
                 const dim3 currGrid = gridSize[p];
@@ -157,9 +231,12 @@ namespace cu
                 // gaussSeidelStepPartition<<<currGrid, currBlock>>>(sol.get(), rhs.get(),
                 //                                                   m.values.get(), m.column.get(), m.rowStart.get(),
                 //                                                   coloring.get() + j0, pSize);
-                gaussSeidelStepPartitionInvDiag<<<currGrid, currBlock>>>(sol.get(), rhs.get(), invDiag.get(),
-                                                                         values.get(), column.get(), rowStart.get(),
-                                                                         coloring.get() + j0, pSize);
+                // gaussSeidelStepPartitionInvDiag<<<currGrid, currBlock>>>(sol.get(), rhs.get(), invDiag.get(),
+                //                                                          values.get(), column.get(), rowStart.get(),
+                //                                                          coloring.get() + j0, pSize);
+                gaussSeidelStepPartitionInvDiagR<<<currGrid, currBlock>>>(sol.get(), rhs.get(), invDiag.get(),
+                                                                          values.get(), column.get(), rowStart.get(),
+                                                                          j0, j1);
             }
 
             const auto tGs = sw.millis(true);
@@ -167,8 +244,8 @@ namespace cu
             // auto rc = cudaStreamSynchronize(0);
 
             // Calculate MSE
-            auto & res = mSpmv.b;
-            mSpmv.compute(sol, res);
+            auto & res = mSpmv->b;
+            mSpmv->compute(sol, res);
             const int n = sol.size();
             cu::saxpy(blas, n, rhs.get(), res.get(), -1.0f);
 
@@ -191,6 +268,9 @@ namespace cu
                 break;
             }
         }
+
+        // Place the result in the IO vector
+        reorderXInv<<<reorderGridSize, reorderBlockSize>>>(sol.get(), ioSol.get(), coloring.get(), n);
 
         return lastMse;
     }
