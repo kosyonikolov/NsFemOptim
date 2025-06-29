@@ -117,6 +117,7 @@ namespace cu
                 }
                 devicePtr = other.devicePtr;
                 length = other.length;
+                externallyOwned = other.externallyOwned;
                 other.devicePtr = 0;
                 other.length = 0;
                 other.cuSparseDescriptor = 0;
@@ -241,7 +242,7 @@ namespace cu
             auto rc = cudaMemcpy(dst, devicePtr, length * sizeof(T), cudaMemcpyKind::cudaMemcpyDeviceToHost);
             if (rc != cudaSuccess)
             {
-                throw std::invalid_argument(std::format("[{}:{}] Failed to upload to device: {}\n", __FILE__, __LINE__,
+                throw std::invalid_argument(std::format("[{}:{}] Failed to download from device: {}\n", __FILE__, __LINE__,
                                                         static_cast<int>(rc)));
             }
         }

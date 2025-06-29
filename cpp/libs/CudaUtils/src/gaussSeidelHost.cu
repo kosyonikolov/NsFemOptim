@@ -6,11 +6,11 @@
 
 namespace cu
 {
-    GaussSeidelHost::GaussSeidelHost(const linalg::CsrMatrix<float> & m)
+    GaussSeidelHost::GaussSeidelHost(const linalg::CsrMatrix<float> & m, const int numCh)
     {
         blas = std::make_unique<Blas>();
         sparse = std::make_unique<Sparse>();
-        cudaGs = std::make_unique<GaussSeidel>(*blas, sparse->handle(), m);
+        cudaGs = std::make_unique<GaussSeidel>(*blas, sparse->handle(), m, numCh);
     }
 
     GaussSeidelHost::~GaussSeidelHost()

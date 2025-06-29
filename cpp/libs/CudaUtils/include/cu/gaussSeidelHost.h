@@ -18,7 +18,7 @@ namespace cu
         std::unique_ptr<GaussSeidel> cudaGs;
 
     public:
-        GaussSeidelHost(const linalg::CsrMatrix<float> & m);
+        GaussSeidelHost(const linalg::CsrMatrix<float> & m, const int numCh = 1);
 
         ~GaussSeidelHost();
 

@@ -144,7 +144,20 @@ std::vector<float> gaussSeidelCuda(const linalg::CsrMatrix<float> & m, const std
 {
     cu::GaussSeidelHost gs(m);
 
-    gs.setMseCheckInterval(5);
+    // gs.setMseCheckInterval(5);
+
+    std::vector<float> x(rhs.size(), 0);
+    gs.solve(rhs, x, maxIters, eps);
+
+    return x;
+}
+
+std::vector<float> gaussSeidelCuda2(const linalg::CsrMatrix<float> & m, const std::vector<float> & rhs,
+                                    const int maxIters, const float eps)
+{
+    cu::GaussSeidelHost gs(m, 2);
+
+    // gs.setMseCheckInterval(5);
 
     std::vector<float> x(rhs.size(), 0);
     gs.solve(rhs, x, maxIters, eps);
@@ -221,20 +234,38 @@ std::vector<std::vector<float>> splitChannels(const std::vector<float> & src, co
     return result;
 }
 
-AlgoFn selectAlgo(const std::string & name)
+// xyxyxy... -> xxx...yyy
+std::vector<float> deinterleaveChannels(const std::vector<float> & src, const int numCh)
 {
-#define RETIF(x)    \
+    const int n = src.size() / numCh;
+    assert(n * numCh == src.size());
+    std::vector<float> result(n * numCh);
+    for (int i = 0; i < n; i++)
+    {
+        for (int c = 0; c < numCh; c++)
+        {
+            result[c * n + i] = src[i * numCh + c];
+        }
+    }
+
+    return result;
+}
+
+std::tuple<AlgoFn, int> selectAlgo(const std::string & name)
+{
+#define RETIF(x, n)    \
     if (name == #x) \
-        return x;
-    RETIF(cg);
-    RETIF(cgCuda);
-    RETIF(cgd);
-    RETIF(gaussSeidel);
-    RETIF(gaussSeidelCuda);
-    RETIF(gaussSeidelCustom);
-    RETIF(jacobi);
+        return {x, n};
+    RETIF(cg, 1);
+    RETIF(cgCuda, 1);
+    RETIF(cgd, 1);
+    RETIF(gaussSeidel, 1);
+    RETIF(gaussSeidelCuda, 1);
+    RETIF(gaussSeidelCuda2, 2);
+    RETIF(gaussSeidelCustom, 1);
+    RETIF(jacobi, 1);
 #undef RETIF
-    return 0;
+    return {0, 0};
 }
 
 int main(int argc, char ** argv)
@@ -270,9 +301,7 @@ int main(int argc, char ** argv)
     }
     std::cout << "Number of channels = " << numCh << "\n";
 
-    auto channels = splitChannels(rhs, numCh);
-
-    AlgoFn algo = selectAlgo(algoName);
+    auto [algo, algoCh] = selectAlgo(algoName);
     if (!algo)
     {
         std::cerr << "No algorithm matching " << algoName << "\n";
@@ -283,13 +312,48 @@ int main(int argc, char ** argv)
     const float eps = 1e-9;
 
     std::vector<float> x;
-    for (int c = 0; c < numCh; c++)
+
+    if (algoCh == 1)
     {
-        std::cout << "================ Channel " << c << " ================\n";
-        auto & currRhs = channels[c];
-        x = algo(m, currRhs, maxIters, eps);
-        const double mse = m.mse(x, currRhs);
-        std::cout << "Final MSE = " << mse << "\n";
+        std::cout << "Single channel solve\n";
+        auto rhsCh = splitChannels(rhs, numCh);
+        for (int c = 0; c < numCh; c++)
+        {
+            std::cout << "================ Channel " << c << " ================\n";
+            auto & currRhs = rhsCh[c];
+            x = algo(m, currRhs, maxIters, eps);
+            const double mse = m.mse(x, currRhs);
+            std::cout << "Final MSE = " << mse << "\n";
+        }
+    }
+    else if (algoCh == 2)
+    {
+        std::cout << "Two channel solve\n";
+        if (numCh != algoCh)
+        {
+            std::cerr << "Impossible - input doesn't have 2 channels\n";
+            return 1;
+        }
+
+        auto rhsPlanar = deinterleaveChannels(rhs, 2);
+
+        x = algo(m, rhsPlanar, maxIters, eps);
+
+        std::array<double, 2> mse;
+        const int n = x.size() / 2;
+        assert(n == m.rows);
+        for (int c = 0; c < 2; c++)
+        {
+            std::span<float> xCh(x.data() + c * n, n);
+            std::span<float> rhsCh(rhsPlanar.data() + c * n, n);
+            mse[c] = m.mse(xCh, rhsCh);
+        }
+        std::cout << "Final MSE = " << mse[0] << " / " << mse[1] << "\n";
+    }
+    else
+    {
+        std::cerr << "Can't process algoCh == " << algoCh << "\n";
+        return 1;
     }
 
     return 0;

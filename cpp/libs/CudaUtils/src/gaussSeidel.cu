@@ -1,6 +1,7 @@
 #include <cu/gaussSeidel.h>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <stdexcept>
 
@@ -13,64 +14,6 @@
 
 namespace cu
 {
-    // Perform a step of the Gauss-Seidel algorithm on a partition of the system Mx = b
-    // M is a square CSR matrix described by values, column and rowStart
-    // The rows which are updated are given by (partition, partitionSize)
-    __global__ void gaussSeidelStepPartition(float * x, const float * b,
-                                             const float * values, const int * column, const int * rowStart,
-                                             const int * partition, const int partitionSize)
-    {
-        int i0 = blockIdx.x * blockDim.x + threadIdx.x;
-        const int stride = blockDim.x * gridDim.x;
-        for (int i = i0; i < partitionSize; i += stride)
-        {
-            const int row = partition[i];
-            const int j1 = rowStart[row + 1];
-            float diag = 0; // element at (i, i)
-            float negSum = 0;
-            for (int j = rowStart[row]; j < j1; j++)
-            {
-                const int col = column[j];
-                // TODO Version where the inverted diagonal is given at the input and the matrix doesn't have diagonal entries - faster?
-                if (col == row)
-                {
-                    diag = values[j];
-                }
-                else
-                {
-                    negSum += values[j] * x[col];
-                }
-            }
-            x[row] = (b[row] - negSum) / diag;
-        }
-    }
-
-    // Perform a step of the Gauss-Seidel algorithm on a partition of the system Mx = b
-    // M is a square CSR matrix with  described by values, column and rowStart
-    // The sparse structure contains NO diagonal elements
-    // Insteady their multiplicative inverses are in invDiag
-    // The rows which are updated are given by (partition, partitionSize)
-    __global__ void gaussSeidelStepPartitionInvDiag(float * x, const float * b, const float * invDiag,
-                                                    const float * values, const int * column, const int * rowStart,
-                                                    const int * partition, const int partitionSize)
-    {
-        int i0 = blockIdx.x * blockDim.x + threadIdx.x;
-        const int stride = blockDim.x * gridDim.x;
-        for (int i = i0; i < partitionSize; i += stride)
-        {
-            const int row = partition[i];
-            const int j1 = rowStart[row + 1];
-            float negSum = 0;
-            for (int j = rowStart[row]; j < j1; j++)
-            {
-                const int col = column[j];
-                // col is never equal to row
-                negSum += values[j] * x[col];
-            }
-            x[row] = (b[row] - negSum) * invDiag[row];
-        }
-    }
-
     __global__ void reorderXbFwd(const float * srcX, const float * srcB,
                                  float * dstX, float * dstB,
                                  const int * coloring, const int n)
@@ -82,6 +25,22 @@ namespace cu
             const int j = coloring[i];
             dstX[i] = srcX[j];
             dstB[i] = srcB[j];
+        }
+    }
+
+    __global__ void reorderXbFwd2ch(const float * srcX, const float * srcB,
+                                    float * dstX, float * dstB,
+                                    const int * coloring, const int n)
+    {
+        int i0 = blockIdx.x * blockDim.x + threadIdx.x;
+        const int stride = blockDim.x * gridDim.x;
+        for (int i = i0; i < n; i += stride)
+        {
+            const int j = coloring[i];
+            dstX[i] = srcX[j];
+            dstB[i] = srcB[j];
+            dstX[i + n] = srcX[j + n];
+            dstB[i + n] = srcB[j + n];
         }
     }
 
@@ -97,6 +56,23 @@ namespace cu
         }
     }
 
+    __global__ void reorderXInv2ch(const float * srcX, float * dstX,
+                                   const int * coloring, const int n)
+    {
+        int i0 = blockIdx.x * blockDim.x + threadIdx.x;
+        const int stride = blockDim.x * gridDim.x;
+        for (int i = i0; i < n; i += stride)
+        {
+            const int j = coloring[i];
+            dstX[j] = srcX[i];
+            dstX[j + n] = srcX[i + n];
+        }
+    }
+
+    // Perform a step of the Gauss-Seidel algorithm on a partition of the system Mx = b
+    // The partition covers rows [partitionStart, partitionEnd)
+    // The matrix is in CSR format, described by values, column and rowStart
+    // It has no diagonal entries - the multiplicative inverse of the original matrix are stored in invDiag instead
     __global__ void gaussSeidelStepPartitionInvDiagR(float * x, const float * b, const float * invDiag,
                                                      const float * values, const int * column, const int * rowStart,
                                                      const int partitionStart, const int partitionEnd)
@@ -117,14 +93,46 @@ namespace cu
         }
     }
 
-    GaussSeidel::GaussSeidel(cu::Blas & blas, cusparseHandle_t sparseHandle, const linalg::CsrMatrix<float> & cpuMatrix)
+    __global__ void gaussSeidelStepPartitionInvDiagR2ch(float * x, const float * b, const float * invDiag,
+                                                        const float * values, const int * column, const int * rowStart,
+                                                        const int partitionStart, const int partitionEnd,
+                                                        const int n)
+    {
+        int row0 = partitionStart + blockIdx.x * blockDim.x + threadIdx.x;
+        const int stride = blockDim.x * gridDim.x;
+        for (int row = row0; row < partitionEnd; row += stride)
+        {
+            const int j1 = rowStart[row + 1];
+            float negSum0 = 0;
+            float negSum1 = 0;
+            for (int j = rowStart[row]; j < j1; j++)
+            {
+                const int col = column[j];
+                // col is never equal to row
+                negSum0 += values[j] * x[col];
+                negSum1 += values[j] * x[col + n];
+            }
+            x[row] = (b[row] - negSum0) * invDiag[row];
+            const int secondRow = row + n;
+            x[secondRow] = (b[secondRow] - negSum1) * invDiag[row];
+        }
+    }
+
+    GaussSeidel::GaussSeidel(cu::Blas & blas, cusparseHandle_t sparseHandle, const linalg::CsrMatrix<float> & cpuMatrix,
+                             const int numCh)
         : blas(blas),
           coloring(cpuMatrix.cols),
-          rhs(cpuMatrix.cols), sol(cpuMatrix.cols),
-          ioRhs(cpuMatrix.cols), ioSol(cpuMatrix.cols)
+          rhs(cpuMatrix.cols * numCh), sol(cpuMatrix.cols * numCh),
+          numCh(numCh),
+          ioRhs(cpuMatrix.cols * numCh), ioSol(cpuMatrix.cols * numCh)
     {
         assert(cpuMatrix.cols == cpuMatrix.rows);
         const int n = cpuMatrix.cols;
+
+        if (numCh < 1 || numCh > 2)
+        {
+            throw std::invalid_argument("Only 1 and 2 ch Gauss-Seidel is supported");
+        }
 
         // Create a coloring of the matrix
         // Use the smallest-last ordering for now - it seems to produce good results
@@ -200,9 +208,17 @@ namespace cu
                 gridSize[p] = dim3(nBlocks);
             }
         }
+
+        if (numCh == 2)
+        {
+            solX = cu::vec<float>(sol.get(), n);
+            solY = cu::vec<float>(sol.get() + n, n);
+            rhsX = cu::vec<float>(rhs.get(), n);
+            rhsY = cu::vec<float>(rhs.get() + n, n);
+        }
     }
 
-    float GaussSeidel::solve(const int maxIters, const float target)
+    float GaussSeidel::solve1(const int maxIters, const float target)
     {
         const int n = coloring.size();
         const int nParts = partitionStart.size() - 1;
@@ -277,6 +293,89 @@ namespace cu
         return lastMse;
     }
 
+    float GaussSeidel::solve2(const int maxIters, const float target)
+    {
+        const int n = coloring.size();
+        const int nParts = partitionStart.size() - 1;
+
+        // Reorder the IO vectors
+        reorderXbFwd2ch<<<reorderGridSize, reorderBlockSize>>>(ioSol.get(), ioRhs.get(),
+                                                               sol.get(), rhs.get(),
+                                                               coloring.get(), n);
+        std::array<float, 2> lastMse = {-1, -1};
+
+        Stopwatch sw;
+        u::Stopwatch bigSw;
+        for (int iter = 0; iter < maxIters; iter++)
+        {
+            bigSw.reset();
+            sw.reset();
+
+            // Perform the updates
+            for (int p = 0; p < nParts; p++)
+            {
+                const int j0 = partitionStart[p];
+                const int j1 = partitionStart[p + 1];
+
+                // Send it
+                const dim3 currGrid = gridSize[p];
+                const dim3 currBlock = blockSize[p];
+                gaussSeidelStepPartitionInvDiagR2ch<<<currGrid, currBlock>>>(sol.get(), rhs.get(), invDiag.get(),
+                                                                             values.get(), column.get(), rowStart.get(),
+                                                                             j0, j1, n);
+            }
+
+            const auto tGs = sw.millis(true);
+
+            bool done = false;
+            std::array<float, 2> mse = {lastMse[0], lastMse[1]};
+            if (iter % mseMod == 0)
+            {
+                // Calculate MSE
+                std::array<cu::vec<float> *, 2> solCh{&solX, &solY};
+                std::array<cu::vec<float> *, 2> rhsCh{&rhsX, &rhsY};
+
+                for (int c = 0; c < 2; c++)
+                {
+                    auto & res = mSpmv->b;
+                    mSpmv->compute(*solCh[c], res);
+                    cu::saxpy(blas, n, rhsCh[c]->get(), res.get(), -1.0f);
+
+                    float norm2 = -1; // == sqrt(sum(res[i]^2))
+                    auto rc = cublasSnrm2(blas.handle, n, res.get(), 1, &norm2);
+                    if (rc != cublasStatus_t::CUBLAS_STATUS_SUCCESS)
+                    {
+                        throw std::runtime_error(std::format("cublasSnrm2 failed: {}", cublasGetStatusName(rc)));
+                    }
+
+                    mse[c] = norm2 / std::sqrt(n);
+                    lastMse[c] = mse[c];
+                }
+
+                if (mse[0] < target && mse[1] < target)
+                {
+                    done = true;
+                }
+            }
+            const auto tMse = sw.millis();
+
+            const auto tIter = bigSw.millis();
+            std::cout << iter << ": " << mse[0] << " / " << mse[1] << " (gs = " << tGs << " ms, mse = " << tMse << " ms, total = " << tIter << " ms)\n";
+            if (done)
+            {
+                break;
+            }
+        }
+
+        // Place the result in the IO vector
+        reorderXInv2ch<<<reorderGridSize, reorderBlockSize>>>(sol.get(), ioSol.get(), coloring.get(), n);
+
+        // Average the channel MSE
+        const float avgMse = std::sqrt(lastMse[0] * lastMse[0] + lastMse[1] * lastMse[1]);
+
+        return avgMse;
+    }
+
     void GaussSeidel::setMseCheckInterval(const int newInterval)
     {
         if (newInterval < 1)
@@ -285,5 +384,18 @@ namespace cu
         }
 
         mseMod = newInterval;
+    }
+
+    float GaussSeidel::solve(const int maxIters, const float target)
+    {
+        if (numCh == 1)
+        {
+            return solve1(maxIters, target);
+        }
+        else
+        {
+            assert(numCh == 2);
+            return solve2(maxIters, target);
+        }
     }
 } // namespace cu
