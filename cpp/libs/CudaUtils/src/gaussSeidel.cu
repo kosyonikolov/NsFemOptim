@@ -166,13 +166,9 @@ namespace cu
 
         // Upload the coloring
         coloring.upload(cpuColoring);
-    }
 
-    float GaussSeidel::solve(const int maxIters, const float target)
-    {
+        // Calculate kernel sizes
         constexpr int maxThreads = 512;
-        const int n = coloring.size();
-        dim3 reorderBlockSize, reorderGridSize;
         if (n <= maxThreads)
         {
             reorderBlockSize = dim3(n);
@@ -187,8 +183,8 @@ namespace cu
 
         // Calculate block and grid sizes for each partition
         const int nParts = partitionStart.size() - 1;
-        std::vector<dim3> blockSize(nParts);
-        std::vector<dim3> gridSize(nParts);
+        blockSize.resize(nParts);
+        gridSize.resize(nParts);
         for (int p = 0; p < nParts; p++)
         {
             const int pSize = partitionStart[p + 1] - partitionStart[p];
@@ -204,6 +200,12 @@ namespace cu
                 gridSize[p] = dim3(nBlocks);
             }
         }
+    }
+
+    float GaussSeidel::solve(const int maxIters, const float target)
+    {
+        const int n = coloring.size();
+        const int nParts = partitionStart.size() - 1;
 
         // Reorder the IO vectors
         reorderXbFwd<<<reorderGridSize, reorderBlockSize>>>(ioSol.get(), ioRhs.get(),
@@ -228,20 +230,12 @@ namespace cu
                 // Send it
                 const dim3 currGrid = gridSize[p];
                 const dim3 currBlock = blockSize[p];
-                // gaussSeidelStepPartition<<<currGrid, currBlock>>>(sol.get(), rhs.get(),
-                //                                                   m.values.get(), m.column.get(), m.rowStart.get(),
-                //                                                   coloring.get() + j0, pSize);
-                // gaussSeidelStepPartitionInvDiag<<<currGrid, currBlock>>>(sol.get(), rhs.get(), invDiag.get(),
-                //                                                          values.get(), column.get(), rowStart.get(),
-                //                                                          coloring.get() + j0, pSize);
                 gaussSeidelStepPartitionInvDiagR<<<currGrid, currBlock>>>(sol.get(), rhs.get(), invDiag.get(),
                                                                           values.get(), column.get(), rowStart.get(),
                                                                           j0, j1);
             }
 
             const auto tGs = sw.millis(true);
-
-            // auto rc = cudaStreamSynchronize(0);
 
             // Calculate MSE
             auto & res = mSpmv->b;

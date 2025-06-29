@@ -33,6 +33,11 @@ namespace cu
         cu::vec<float> rhs;        
         cu::vec<float> sol;
 
+        // Block & grid sizes for the kernels
+        dim3 reorderBlockSize, reorderGridSize;
+        std::vector<dim3> blockSize;
+        std::vector<dim3> gridSize;
+
     public:
         // Input/output vectors
         // Do not reallocate!
