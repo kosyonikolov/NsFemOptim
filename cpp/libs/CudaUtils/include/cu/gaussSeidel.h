@@ -38,6 +38,9 @@ namespace cu
         std::vector<dim3> blockSize;
         std::vector<dim3> gridSize;
 
+        // Check MSE if iter % mseMod == 0
+        int mseMod = 1;
+
     public:
         // Input/output vectors
         // Do not reallocate!
@@ -48,6 +51,8 @@ namespace cu
 
         // -> MSE of solution
         float solve(const int maxIters, const float target);
+
+        void setMseCheckInterval(const int newInterval);
     };
 }
 

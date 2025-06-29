@@ -237,27 +237,35 @@ namespace cu
 
             const auto tGs = sw.millis(true);
 
-            // Calculate MSE
-            auto & res = mSpmv->b;
-            mSpmv->compute(sol, res);
-            const int n = sol.size();
-            cu::saxpy(blas, n, rhs.get(), res.get(), -1.0f);
-
-            float norm2 = -1; // == sqrt(sum(res[i]^2))
-            auto rc = cublasSnrm2(blas.handle, n, res.get(), 1, &norm2);
-            if (rc != cublasStatus_t::CUBLAS_STATUS_SUCCESS)
+            bool done = false;
+            float mse = lastMse;
+            if (iter % mseMod == 0)
             {
-                throw std::runtime_error(std::format("cublasSnrm2 failed: {}", cublasGetStatusName(rc)));
+                // Calculate MSE
+                auto & res = mSpmv->b;
+                mSpmv->compute(sol, res);
+                const int n = sol.size();
+                cu::saxpy(blas, n, rhs.get(), res.get(), -1.0f);
+
+                float norm2 = -1; // == sqrt(sum(res[i]^2))
+                auto rc = cublasSnrm2(blas.handle, n, res.get(), 1, &norm2);
+                if (rc != cublasStatus_t::CUBLAS_STATUS_SUCCESS)
+                {
+                    throw std::runtime_error(std::format("cublasSnrm2 failed: {}", cublasGetStatusName(rc)));
+                }
+
+                mse = norm2 / std::sqrt(n);
+                lastMse = mse;
+                if (mse < target)
+                {
+                    done = true;
+                }
             }
-
             const auto tMse = sw.millis();
-
-            const float mse = norm2 / std::sqrt(n);
-            lastMse = mse;
 
             const auto tIter = bigSw.millis();
             std::cout << iter << ": " << mse << " (gs = " << tGs << " ms, mse = " << tMse << " ms, total = " << tIter << " ms)\n";
-            if (mse < target)
+            if (done)
             {
                 break;
             }
@@ -267,5 +275,15 @@ namespace cu
         reorderXInv<<<reorderGridSize, reorderBlockSize>>>(sol.get(), ioSol.get(), coloring.get(), n);
 
         return lastMse;
+    }
+
+    void GaussSeidel::setMseCheckInterval(const int newInterval)
+    {
+        if (newInterval < 1)
+        {
+            throw std::invalid_argument("MSE check interval should be at least 1");
+        }
+
+        mseMod = newInterval;
     }
 } // namespace cu

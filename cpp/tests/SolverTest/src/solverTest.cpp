@@ -144,6 +144,8 @@ std::vector<float> gaussSeidelCuda(const linalg::CsrMatrix<float> & m, const std
 {
     cu::GaussSeidelHost gs(m);
 
+    gs.setMseCheckInterval(5);
+
     std::vector<float> x(rhs.size(), 0);
     gs.solve(rhs, x, maxIters, eps);
 

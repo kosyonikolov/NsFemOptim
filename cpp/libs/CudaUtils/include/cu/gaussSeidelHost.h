@@ -24,7 +24,9 @@ namespace cu
 
         float solve(const std::vector<float> & rhs, std::vector<float> & sol,
                     const int maxIters, const float target);
+
+        void setMseCheckInterval(const int newInterval);
     };
-}
+} // namespace cu
 
 #endif /* LIBS_CUDAUTILS_INCLUDE_CU_GAUSSSEIDELHOST */

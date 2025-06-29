@@ -27,4 +27,9 @@ namespace cu
         cudaGs->ioSol.download(sol);
         return mse;
     }
+
+    void GaussSeidelHost::setMseCheckInterval(const int newInterval)
+    {
+        cudaGs->setMseCheckInterval(newInterval);
+    }
 } // namespace cu
