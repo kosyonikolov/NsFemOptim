@@ -134,6 +134,7 @@ namespace cu
             throw std::invalid_argument("Only 1 and 2 ch Gauss-Seidel is supported");
         }
 
+        // TODO Extract the matrix preprocessing to separate function?
         // Create a coloring of the matrix
         // Use the smallest-last ordering for now - it seems to produce good results
         auto graph = linalg::buildCsrGraph(cpuMatrix);
@@ -163,7 +164,15 @@ namespace cu
 
         // Upload the reordered matrix
         m = std::make_unique<csrF>(reordered);
-        mSpmv = std::make_unique<spmv>(sparseHandle, *m);
+
+        if (numCh == 1)
+        {
+            mSpmv = std::make_unique<spmv>(sparseHandle, *m);
+        }
+        else
+        {
+            mSpmm = std::make_unique<spmm>(sparseHandle, *m, numCh);
+        }
 
         // Create a stripped matrix (no diagonal) and the inverted diagonal
         auto ctx = linalg::buildGaussSeidelContext(reordered);
@@ -207,14 +216,6 @@ namespace cu
                 const int nBlocks = (pSize + maxThreads - 1) / maxThreads;
                 gridSize[p] = dim3(nBlocks);
             }
-        }
-
-        if (numCh == 2)
-        {
-            solX = cu::vec<float>(sol.get(), n);
-            solY = cu::vec<float>(sol.get() + n, n);
-            rhsX = cu::vec<float>(rhs.get(), n);
-            rhsY = cu::vec<float>(rhs.get() + n, n);
         }
     }
 
@@ -332,17 +333,14 @@ namespace cu
             if (iter % mseMod == 0)
             {
                 // Calculate MSE
-                std::array<cu::vec<float> *, 2> solCh{&solX, &solY};
-                std::array<cu::vec<float> *, 2> rhsCh{&rhsX, &rhsY};
+                auto & resXy = mSpmm->b;
+                mSpmm->compute(sol, resXy);
+                cu::saxpy(blas, 2 * n, rhs.get(), resXy.get(), -1.0f);
 
                 for (int c = 0; c < 2; c++)
                 {
-                    auto & res = mSpmv->b;
-                    mSpmv->compute(*solCh[c], res);
-                    cu::saxpy(blas, n, rhsCh[c]->get(), res.get(), -1.0f);
-
                     float norm2 = -1; // == sqrt(sum(res[i]^2))
-                    auto rc = cublasSnrm2(blas.handle, n, res.get(), 1, &norm2);
+                    auto rc = cublasSnrm2(blas.handle, n, resXy.get() + c * n, 1, &norm2);
                     if (rc != cublasStatus_t::CUBLAS_STATUS_SUCCESS)
                     {
                         throw std::runtime_error(std::format("cublasSnrm2 failed: {}", cublasGetStatusName(rc)));

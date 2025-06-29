@@ -21,6 +21,7 @@ namespace cu
         bool externallyOwned = false;
 
         cusparseDnVecDescr_t cuSparseDescriptor = 0;
+        cusparseDnMatDescr_t cuSparseMatDescriptor = 0;
 
         void resetDescriptor()
         {
@@ -29,6 +30,12 @@ namespace cu
                 auto rc = cusparseDestroyDnVec(cuSparseDescriptor);
                 assert(rc == cusparseStatus_t::CUSPARSE_STATUS_SUCCESS);
                 cuSparseDescriptor = 0;
+            }
+            if (cuSparseMatDescriptor)
+            {
+                auto rc = cusparseDestroyDnMat(cuSparseMatDescriptor);
+                assert(rc == cusparseStatus_t::CUSPARSE_STATUS_SUCCESS);
+                cuSparseMatDescriptor = 0;
             }
         }
 
@@ -39,6 +46,7 @@ namespace cu
         vec(const vec & other)
         {
             cuSparseDescriptor = 0;
+            cuSparseMatDescriptor = 0;
             length = other.length;
             const size_t totalLength = length * sizeof(T);
             auto rc = cudaMalloc(&devicePtr, totalLength);
@@ -118,9 +126,14 @@ namespace cu
                 devicePtr = other.devicePtr;
                 length = other.length;
                 externallyOwned = other.externallyOwned;
+                cuSparseDescriptor = other.cuSparseDescriptor;
+                cuSparseMatDescriptor = other.cuSparseMatDescriptor;
+
                 other.devicePtr = 0;
                 other.length = 0;
+                other.externallyOwned = false;
                 other.cuSparseDescriptor = 0;
+                other.cuSparseMatDescriptor = 0;
             }
             return *this;
         }
@@ -353,6 +366,11 @@ namespace cu
 
         // Creates if it doesn't exist
         cusparseDnVecDescr_t getCuSparseDescriptor();
+
+        // Get descriptor for a column major matrix
+        // rows = n / numCh, cols = numCh
+        // Creates the descriptor if it doesn't exist
+        cusparseDnMatDescr_t getCuSparseMatDescriptor(const int numCh);
     };
 } // namespace cu
 

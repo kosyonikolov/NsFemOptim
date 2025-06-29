@@ -8,6 +8,7 @@
 #include <cu/blas.h>
 #include <cu/csrF.h>
 #include <cu/spmv.h>
+#include <cu/spmm.h>
 
 namespace cu
 {
@@ -16,7 +17,9 @@ namespace cu
         cu::Blas & blas;
 
         std::unique_ptr<csrF> m; // reordered
-        std::unique_ptr<spmv> mSpmv;
+
+        std::unique_ptr<spmv> mSpmv; // Used for single-channel
+        std::unique_ptr<spmm> mSpmm; // For two-channel
 
         // Stripped matrix + inverted diagonal
         cu::vec<float> values;
@@ -42,11 +45,6 @@ namespace cu
 
         // Check MSE if iter % mseMod == 0
         int mseMod = 1;
-
-        // For two-channel operation
-        // These are views of sol and rhs
-        cu::vec<float> solX, solY;
-        cu::vec<float> rhsX, rhsY;
 
         float solve1(const int maxIters, const float target);
 
