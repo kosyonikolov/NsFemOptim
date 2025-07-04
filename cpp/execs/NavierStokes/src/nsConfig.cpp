@@ -24,6 +24,17 @@ NsConfig parseNsConfig(const std::string & fileName)
     PARSE(maxT);
     PARSE(tau);
 
+    PARSE(chorinCuda.velocitySolver.method);
+    PARSE(chorinCuda.velocitySolver.maxIterations);
+    PARSE(chorinCuda.velocitySolver.targetMse);
+    PARSE(chorinCuda.velocitySolver.mseCheckInterval);
+
+    PARSE(chorinCuda.pressureSolver.method);
+    PARSE(chorinCuda.pressureSolver.maxIterations);
+    PARSE(chorinCuda.pressureSolver.targetMse);
+    PARSE(chorinCuda.pressureSolver.mseCheckInterval);
+
+    PARSE(output.ext);
     PARSE(output.frameStep);
     PARSE(output.velocityStep);
     PARSE(output.velocityScale);

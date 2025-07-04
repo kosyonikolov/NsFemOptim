@@ -79,7 +79,7 @@ int main(int argc, char ** argv)
     else if (cfg.algo == "chorinCuda")
     {
         std::cout << "Using CUDA Chorin method\n";
-        sol = solveNsChorinCuda(velocityMesh, pressureMesh, cond, tau, maxT);
+        sol = solveNsChorinCuda(velocityMesh, pressureMesh, cond, tau, maxT, cfg.chorinCuda);
     }
 
     // Find range of pressure
@@ -105,6 +105,7 @@ int main(int argc, char ** argv)
     const float velocityStep = cfg.output.velocityStep;
     const float velocityScale = cfg.output.velocityScale / cfg.peakVelocity;
     int j = 0;
+    const auto outputExt = cfg.output.ext;
     for (int i = 0; i < sol.steps.size(); i += cfg.output.frameStep, j++)
     {
         const auto & s = sol.steps[i];
@@ -112,7 +113,7 @@ int main(int argc, char ** argv)
                                           velocityScale, velocityStep,
                                           velocityMesh, pressureMesh,
                                           s.velocity, s.pressure);
-        const std::string outFname = std::format("{}/out_{}.png", outputDir, j);
+        const std::string outFname = std::format("{}/out_{}.{}", outputDir, j, outputExt);
         std::cout << outFname << "\n";
         cv::imwrite(outFname, img);
     }

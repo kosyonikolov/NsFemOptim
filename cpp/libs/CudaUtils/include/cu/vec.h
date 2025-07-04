@@ -164,6 +164,19 @@ namespace cu
             }
         }
 
+        void copyTo(cu::vec<T> & dst) const
+        {
+            if (dst.size() != size())
+            {
+                throw std::invalid_argument("vec copy: size mismatch");
+            }
+            auto rc = cudaMemcpy(dst.get(), get(), size() * sizeof(T), cudaMemcpyKind::cudaMemcpyDeviceToDevice);
+            if (rc != cudaError_t::cudaSuccess)
+            {
+                throw std::runtime_error(std::format("cudaMemcpy failed: {}", cudaGetErrorName(rc)));
+            }
+        }
+
         void memsetZero()
         {
             if (!devicePtr)

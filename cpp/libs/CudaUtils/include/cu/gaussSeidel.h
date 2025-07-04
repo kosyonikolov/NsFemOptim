@@ -56,6 +56,10 @@ namespace cu
         cu::vec<float> ioRhs;
         cu::vec<float> ioSol;
 
+        // Output statistics
+        std::vector<float> lastMse;
+        int lastIterations = -1;
+
         GaussSeidel(cu::Blas & blas, cusparseHandle_t sparseHandle, const linalg::CsrMatrix<float> & cpuMatrix,
                     const int numCh = 1);
 

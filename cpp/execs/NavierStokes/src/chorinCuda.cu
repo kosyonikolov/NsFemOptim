@@ -5,11 +5,11 @@
 #include <stdexcept>
 
 #include <cu/blas.h>
-#include <cu/conjGradF.h>
 #include <cu/csrF.h>
-#include <cu/dssSolver.h>
+#include <cu/solvers/solverFactory.h>
 #include <cu/sparse.h>
 #include <cu/spmv.h>
+#include <cu/spmm.h>
 
 #include <linalg/io.h>
 
@@ -74,98 +74,11 @@ struct DirichletVelocity
     }
 };
 
-struct PressureSolverCg
+struct PressureSolver
 {
     cu::Sparse & lib;
-    cu::csrF & pressureStiffnessInternal;
-    cu::ConjugateGradientF cg;
 
-    int numAll;
-    int numInternal;
-
-    float cgTarget = 1e-6;
-    int cgMaxIters = 1000;
-
-    // Input/output buffer
-    // Before pressure is calculated, this is tentativeVelDiv
-    // After it is calculated, this is the pressure
-    cu::vec<float> dense;
-    cu::vec<int> internalIds;
-    cu::vec<float> rhs;
-    cu::vec<float> internalPressure;
-
-    cusparseSpVecDescr_t sparseInput;  // values = rhs
-    cusparseSpVecDescr_t sparseOutput; // values = internalPressure
-
-    float lastMse;
-
-    PressureSolverCg(cu::Sparse & lib, cu::csrF & m1,
-                     const int numPressureNodes,
-                     const std::vector<int> & internalPressureIds)
-        : lib(lib), pressureStiffnessInternal(m1), cg(m1),
-          dense(numPressureNodes),
-          internalIds(internalPressureIds),
-          rhs(internalPressureIds.size()),
-          internalPressure(internalPressureIds.size())
-    {
-        assert(m1.cols == m1.rows);
-        assert(m1.cols == internalPressureIds.size());
-        numAll = numPressureNodes;
-        numInternal = internalPressureIds.size();
-        assert(numInternal > 0 && numInternal <= numAll);
-
-        auto rc = cusparseCreateSpVec(&sparseInput, numAll, numInternal,
-                                      internalIds.get(),
-                                      rhs.get(),
-                                      cusparseIndexType_t::CUSPARSE_INDEX_32I,
-                                      cusparseIndexBase_t::CUSPARSE_INDEX_BASE_ZERO,
-                                      cudaDataType::CUDA_R_32F);
-        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
-        {
-            throw std::runtime_error(std::format("cusparseCreateSpVec failed: {}", cusparseGetErrorName(rc)));
-        }
-
-        rc = cusparseCreateSpVec(&sparseOutput, numAll, numInternal,
-                                 internalIds.get(),
-                                 internalPressure.get(),
-                                 cusparseIndexType_t::CUSPARSE_INDEX_32I,
-                                 cusparseIndexBase_t::CUSPARSE_INDEX_BASE_ZERO,
-                                 cudaDataType::CUDA_R_32F);
-        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
-        {
-            throw std::runtime_error(std::format("cusparseCreateSpVec failed: {}", cusparseGetErrorName(rc)));
-        }
-    }
-
-    void update()
-    {
-        auto rc = cusparseGather(lib.handle(), dense.getCuSparseDescriptor(), sparseInput);
-        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
-        {
-            throw std::runtime_error(std::format("cusparseGather failed: {}", cusparseGetErrorName(rc)));
-        }
-
-        lastMse = cg.solve(rhs, internalPressure, cgMaxIters, cgTarget);
-        if (!std::isfinite(lastMse))
-        {
-            throw std::runtime_error("Bad CG");
-        }
-
-        // Output pressure
-        dense.memsetZero();
-        rc = cusparseScatter(lib.handle(), sparseOutput, dense.getCuSparseDescriptor());
-        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
-        {
-            throw std::runtime_error(std::format("cusparseScatter failed: {}", cusparseGetErrorName(rc)));
-        }
-    }
-};
-
-struct PressureSolverDss
-{
-    cu::Dss & dss;
-    cu::Sparse & lib;
-    cu::DssSolver solver;
+    cu::AbstractSolver & solver;
 
     int numAll;
     int numInternal;
@@ -179,25 +92,19 @@ struct PressureSolverDss
     cusparseSpVecDescr_t sparseInput;  // values = rhs
     cusparseSpVecDescr_t sparseOutput; // values = internalPressure
 
-    float lastMse;
-
-    PressureSolverDss(cu::Dss & dss, cu::Sparse & lib,
-                      const linalg::CsrMatrix<float> & m1,
-                      const int numPressureNodes,
-                      const std::vector<int> & internalPressureIds)
-        : dss(dss), lib(lib), 
-          solver(dss, m1, 1, cudssMatrixType_t::CUDSS_MTYPE_SPD),
+    PressureSolver(cu::AbstractSolver & solver, cu::Sparse & lib,
+                   const int numPressureNodes,
+                   const std::vector<int> & internalPressureIds)
+        : lib(lib), solver(solver),
           dense(numPressureNodes),
           internalIds(internalPressureIds)
     {
-        assert(m1.cols == m1.rows);
-        assert(m1.cols == internalPressureIds.size());
         numAll = numPressureNodes;
         numInternal = internalPressureIds.size();
         assert(numInternal > 0 && numInternal <= numAll);
 
-        auto & rhs = solver.rhs;
-        auto & internalPressure = solver.sol;
+        auto & rhs = solver.getRhs();
+        auto & internalPressure = solver.getSol();
 
         auto rc = cusparseCreateSpVec(&sparseInput, numAll, numInternal,
                                       internalIds.get(),
@@ -220,8 +127,6 @@ struct PressureSolverDss
         {
             throw std::runtime_error(std::format("cusparseCreateSpVec failed: {}", cusparseGetErrorName(rc)));
         }
-
-        solver.analyze();
     }
 
     void update()
@@ -247,11 +152,11 @@ struct PressureSolverDss
 };
 
 Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
-                           const DfgConditions & cond, const float timeStep0, const float maxT)
+                           const DfgConditions & cond, const float timeStep0, const float maxT,
+                           const ChorinCudaConfig & cfg)
 {
     cu::Blas blas;
     cu::Sparse sparse;
-    cu::Dss dss;
 
     float plusOne = 1.0f;
 
@@ -276,7 +181,7 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
     }
 
     cu::spmv fcSpmv(sparse.handle(), fastConvectionIntegration);
-    cu::spmv aSpmv(sparse.handle(), velocityStiffnessPlusConvection);
+    cu::spmm aSpmm(sparse.handle(), velocityStiffnessPlusConvection, 2);
 
     const int numVelocityNodes = ctx.numVelocityNodes;
     const int numPressureNodes = ctx.numPressureNodes;
@@ -291,17 +196,21 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
     cu::vec<float> velocityY(velocityXy.get() + numVelocityNodes, numVelocityNodes);
 
     // Acceleration
-    cu::vec<float> accel(numVelocityNodes);
-    cu::ConjugateGradientF velocityMassCg(velocityMass);
-    const float cgTargetAccel = 1e-6f;
-    const int cgMaxItersAccel = 1000;
+    // cu::vec<float> accel(2 * numVelocityNodes);
+    const auto & vSolverCfg = cfg.velocitySolver;
+    auto velocitySolver = cu::createSolver(vSolverCfg.method, 2,
+                                           ctx.velocityMass, vSolverCfg.maxIterations,
+                                           vSolverCfg.targetMse, vSolverCfg.mseCheckInterval);
+    auto & accel = velocitySolver->getSol();
 
     // Pressure
     cu::spmv vpdSpmv(sparse.handle(), velocityPressureDiv);
-    // PressureSolverCg pressureSolver(sparse, pressureStiffnessInternal,
-    //                                 numPressureNodes, ctx.internalPressureNodes);
-    PressureSolverDss pressureSolver(dss, sparse, ctx.pressureStiffnessInternal, 
-                                     numPressureNodes, ctx.internalPressureNodes);
+    const auto & pSolverCfg = cfg.pressureSolver;
+    auto pressureSolverCore = cu::createSolver(pSolverCfg.method, 1,
+                                               ctx.pressureStiffnessInternal, pSolverCfg.maxIterations,
+                                               pSolverCfg.targetMse, pSolverCfg.mseCheckInterval);
+    PressureSolver pressureSolver(*pressureSolverCore, sparse, numPressureNodes, ctx.internalPressureNodes);
+
     cu::spmv pvdSpmv(sparse.handle(), pressureVelocityDiv);
     auto & nablaPXy = pvdSpmv.b;
     assert(nablaPXy.size() == 2 * numVelocityNodes);
@@ -320,7 +229,7 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
     const bool dbgDumps = false;
     std::vector<float> dbgVelocityXy(velocityXy.size());
     // std::vector<float> dbgPressureRhs(pressureSolver.rhs.size());
-    std::vector<float> dbgPressureRhs(pressureSolver.solver.rhs.size());
+    std::vector<float> dbgPressureRhs(pressureSolver.solver.getRhs().size());
     std::vector<float> dbgInternalP(ctx.internalPressureNodes.size());
     std::vector<float> dbgFullP(numPressureNodes);
 
@@ -349,30 +258,21 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         // Find tentative velocity in two steps:
         // 1) Compute accelRhsC = A * velocityC
         // 2) Solve M0 * accelC = accelRhsC
-        // Repeat for C = {X, Y}
+        // Solve for X and Y simultaneously
 
-        // X
-        auto & accelRhs = aSpmv.b;
-        aSpmv.compute(velocityX, accelRhs);
+        auto & accelRhs = velocitySolver->getRhs();
+        aSpmm.compute(velocityXy, accelRhs);
         accel.memsetZero();
-        const float mseTentX = velocityMassCg.solve(accelRhs, accel, cgMaxItersAccel, cgTargetAccel);
-        if (!std::isfinite(mseTentX))
+        velocitySolver->solve();
+        const float mseTentX = velocitySolver->getLastMse(0);
+        const float mseTentY = velocitySolver->getLastMse(1);
+        const int tentIters = velocitySolver->getLastIterations();
+        if (!std::isfinite(mseTentX) || !std::isfinite(mseTentY))
         {
-            throw std::runtime_error("Bad CG");
+            throw std::runtime_error("Tentative acceleration is bad");
         }
         // v* = v - tau * accel
-        cu::saxpy(blas, numVelocityNodes, accel.get(), velocityX.get(), -tau);
-
-        // Y
-        aSpmv.compute(velocityY, accelRhs);
-        accel.memsetZero();
-        const float mseTentY = velocityMassCg.solve(accelRhs, accel, cgMaxItersAccel, cgTargetAccel);
-        if (!std::isfinite(mseTentY))
-        {
-            throw std::runtime_error("Bad CG");
-        }
-        // v* = v - tau * accel
-        cu::saxpy(blas, numVelocityNodes, accel.get(), velocityY.get(), -tau);
+        cu::saxpy(blas, 2 * numVelocityNodes, accel.get(), velocityXy.get(), -tau);
 
         // Reimpose BCs
         dirichletVelocity.impose();
@@ -398,11 +298,12 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         cu::scale(blas, pressureSolver.dense.size(), pressureSolver.dense.get(), invTau);
 
         pressureSolver.update();
-        const float msePressure = pressureSolver.lastMse;
+        const float msePressure = pressureSolver.solver.getLastMse();
+        const int pressureIters = pressureSolver.solver.getLastIterations();
         if (dbgDumps)
         {
             // pressureSolver.rhs.download(dbgPressureRhs);
-            pressureSolver.solver.rhs.download(dbgPressureRhs);
+            pressureSolver.solver.getRhs().download(dbgPressureRhs);
             linalg::write(std::format("{}/{}_pressureRhs.bin", dumpDir, iT), dbgPressureRhs);
         }
 
@@ -412,7 +313,7 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         if (dbgDumps)
         {
             // pressureSolver.internalPressure.download(dbgInternalP);
-            pressureSolver.solver.sol.download(dbgInternalP);
+            pressureSolver.solver.getSol().download(dbgInternalP);
             pressure.download(dbgFullP);
             linalg::write(std::format("{}/{}_internalP.bin", dumpDir, iT), dbgInternalP);
             linalg::write(std::format("{}/{}_fullP.bin", dumpDir, iT), dbgFullP);
@@ -434,28 +335,23 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         // <=> a = nabla(p) <=>
         // <=> (a, v) = (nabla(p), v)
         // Then update: u_{i+1} = u_* + tau * a
-        // Calculate X and Y channels separately
+        // Calculate X and Y channels simultaneously
 
         // nablaPXy = pressureVelocityDiv * pressure;
         pvdSpmv.compute(pressure, nablaPXy);
 
-        // X
+        nablaPXy.copyTo(accelRhs); // TODO Can we compute in accelRhs directly?
         accel.memsetZero();
-        const float mseFinalX = velocityMassCg.solve(nablaPX, accel, cgMaxItersAccel, cgTargetAccel);
-        if (!std::isfinite(mseFinalX))
+        velocitySolver->solve();
+        const float mseFinalX = velocitySolver->getLastMse(0);
+        const float mseFinalY = velocitySolver->getLastMse(1);
+        const int finalIters = velocitySolver->getLastIterations();
+        if (!std::isfinite(mseFinalX) || !std::isfinite(mseFinalY))
         {
-            throw std::runtime_error("Bad CG");
+            throw std::runtime_error("Final acceleration is bad");
         }
-        cu::saxpy(blas, numVelocityNodes, accel.get(), velocityX.get(), -tau);
 
-        // Y
-        accel.memsetZero();
-        const float mseFinalY = velocityMassCg.solve(nablaPY, accel, cgMaxItersAccel, cgTargetAccel);
-        if (!std::isfinite(mseFinalY))
-        {
-            throw std::runtime_error("Bad CG");
-        }
-        cu::saxpy(blas, numVelocityNodes, accel.get(), velocityY.get(), -tau);
+        cu::saxpy(blas, 2 * numVelocityNodes, accel.get(), velocityXy.get(), -tau);
 
         dirichletVelocity.impose();
 
@@ -473,8 +369,10 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         std::cout << std::format("{} / {}: {} ms\n", iT, numTimeSteps, tIter);
         std::cout << std::format("\tconvection = {}, tentative = {}, pressure = {}, pressureDownload = {}, final = {}, finalDownload = {}\n",
                                  tConvection, tTentative, tPressure, tPressureDownload, tFinal, tFinalDownload);
-        std::cout << std::format("\tMSEs: tentX = {}, tentY = {}, pressure = {}, finalX = {}, finalY = {}\n",
-                                 mseTentX, mseTentY, msePressure, mseFinalX, mseFinalY);
+        std::cout << std::format("\tMSEs: tent (X / Y / iters) = {} / {} / {}, pressure = {} / {}, final (X / Y / iters) = {} / {} / {}\n",
+                                 mseTentX, mseTentY, tentIters,
+                                 msePressure, pressureIters, 
+                                 mseFinalX, mseFinalY, finalIters);
     }
 
     return result;

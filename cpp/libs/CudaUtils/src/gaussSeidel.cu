@@ -217,6 +217,8 @@ namespace cu
                 gridSize[p] = dim3(nBlocks);
             }
         }
+
+        lastMse.resize(numCh);
     }
 
     float GaussSeidel::solve1(const int maxIters, const float target)
@@ -231,12 +233,18 @@ namespace cu
 
         float lastMse = -1;
 
+#ifdef CU_SOLVERS_ITER_LOG
         Stopwatch sw;
         u::Stopwatch bigSw;
-        for (int iter = 0; iter < maxIters; iter++)
+#endif
+
+        int iter = 0;
+        for (; iter < maxIters; iter++)
         {
+#ifdef CU_SOLVERS_ITER_LOG
             bigSw.reset();
             sw.reset();
+#endif
 
             // Perform the updates
             for (int p = 0; p < nParts; p++)
@@ -252,7 +260,9 @@ namespace cu
                                                                           j0, j1);
             }
 
+#ifdef CU_SOLVERS_ITER_LOG
             const auto tGs = sw.millis(true);
+#endif
 
             bool done = false;
             float mse = lastMse;
@@ -278,10 +288,12 @@ namespace cu
                     done = true;
                 }
             }
-            const auto tMse = sw.millis();
 
+#ifdef CU_SOLVERS_ITER_LOG
+            const auto tMse = sw.millis();
             const auto tIter = bigSw.millis();
             std::cout << iter << ": " << mse << " (gs = " << tGs << " ms, mse = " << tMse << " ms, total = " << tIter << " ms)\n";
+#endif
             if (done)
             {
                 break;
@@ -290,6 +302,9 @@ namespace cu
 
         // Place the result in the IO vector
         reorderXInv<<<reorderGridSize, reorderBlockSize>>>(sol.get(), ioSol.get(), coloring.get(), n);
+
+        this->lastMse[0] = lastMse;
+        this->lastIterations = iter;
 
         return lastMse;
     }
@@ -305,12 +320,18 @@ namespace cu
                                                                coloring.get(), n);
         std::array<float, 2> lastMse = {-1, -1};
 
+#ifdef CU_SOLVERS_ITER_LOG
         Stopwatch sw;
         u::Stopwatch bigSw;
-        for (int iter = 0; iter < maxIters; iter++)
+#endif
+
+        int iter = 0;
+        for (; iter < maxIters; iter++)
         {
+#ifdef CU_SOLVERS_ITER_LOG
             bigSw.reset();
             sw.reset();
+#endif
 
             // Perform the updates
             for (int p = 0; p < nParts; p++)
@@ -326,7 +347,9 @@ namespace cu
                                                                              j0, j1, n);
             }
 
+#ifdef CU_SOLVERS_ITER_LOG
             const auto tGs = sw.millis(true);
+#endif
 
             bool done = false;
             std::array<float, 2> mse = {lastMse[0], lastMse[1]};
@@ -355,10 +378,12 @@ namespace cu
                     done = true;
                 }
             }
-            const auto tMse = sw.millis();
 
+#ifdef CU_SOLVERS_ITER_LOG
+            const auto tMse = sw.millis();
             const auto tIter = bigSw.millis();
             std::cout << iter << ": " << mse[0] << " / " << mse[1] << " (gs = " << tGs << " ms, mse = " << tMse << " ms, total = " << tIter << " ms)\n";
+#endif
             if (done)
             {
                 break;
@@ -370,6 +395,10 @@ namespace cu
 
         // Average the channel MSE
         const float avgMse = std::sqrt(lastMse[0] * lastMse[0] + lastMse[1] * lastMse[1]);
+
+        this->lastMse[0] = lastMse[0];
+        this->lastMse[1] = lastMse[1];
+        this->lastIterations = iter;
 
         return avgMse;
     }

@@ -1,8 +1,8 @@
 #include <cu/conjGradF.h>
 
 #include <format>
-#include <stdexcept>
 #include <iostream>
+#include <stdexcept>
 
 #include <utils/stopwatch.h>
 
@@ -67,10 +67,14 @@ namespace cu
             return lastMse;
         }
 
+#ifdef CU_SOLVERS_ITER_LOG
         u::Stopwatch bigSw;
+#endif
         for (int iter = 0; iter < maxIters; iter++)
         {
+#ifdef CU_SOLVERS_ITER_LOG
             bigSw.reset();
+#endif
             // m.rMult(p, d);
             spmv.compute();
 
@@ -138,8 +142,10 @@ namespace cu
 
             dotR0 = dotR1;
 
+#ifdef CU_SOLVERS_ITER_LOG
             const auto tIter = bigSw.millis();
             std::cout << iter << ": " << currMse << " (iter = " << tIter << " ms)\n";
+#endif
         }
 
         return lastMse;
