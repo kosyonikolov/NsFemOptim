@@ -130,7 +130,7 @@ namespace cu
             {
                 return lastCombinedMse;
             }
-            if (ch > 0 && ch < lastMse.size())
+            if (ch >= 0 && ch < lastMse.size())
             {
                 return lastMse[ch];
             }
