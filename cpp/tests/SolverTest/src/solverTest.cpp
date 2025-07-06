@@ -11,10 +11,18 @@
 
 #include <cu/gaussSeidelHost.h>
 #include <cu/conjGradHost.h>
+#include <cu/dssSolverHost.h>
 
 #include <utils/stopwatch.h>
 
 using AlgoFn = std::vector<float> (*)(const linalg::CsrMatrix<float> &, const std::vector<float> &, const int, const float);
+
+// For easy measurement of GPU memory
+void waitKb()
+{
+    // std::cout << "Press Enter to continue...";
+    // std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
 
 template <typename F>
 double conjugateGradient(const linalg::CsrMatrix<F> & m, std::vector<F> & x, const std::vector<F> & b,
@@ -143,11 +151,13 @@ std::vector<float> gaussSeidelCuda(const linalg::CsrMatrix<float> & m, const std
                                    const int maxIters, const float eps)
 {
     cu::GaussSeidelHost gs(m);
+    waitKb();
 
     // gs.setMseCheckInterval(5);
 
     std::vector<float> x(rhs.size(), 0);
     gs.solve(rhs, x, maxIters, eps);
+    waitKb();
 
     return x;
 }
@@ -177,10 +187,24 @@ std::vector<float> cgCuda(const linalg::CsrMatrix<float> & m, const std::vector<
                           const int maxIters, const float eps)
 {
     cu::ConjGradHost cg(m);
+    waitKb();
 
     std::vector<float> x(rhs.size(), 0);
     cg.solve(rhs, x, maxIters, eps);
+    waitKb();
 
+    return x;
+}
+
+std::vector<float> cudss(const linalg::CsrMatrix<float> & m, const std::vector<float> & rhs,
+                         const int, const float)
+{
+    cu::DssSolverHost solver(m);
+    waitKb();
+
+    std::vector<float> x(rhs.size(), 0);
+    solver.solve(rhs, x);
+    waitKb();
     return x;
 }
 
@@ -264,6 +288,7 @@ std::tuple<AlgoFn, int> selectAlgo(const std::string & name)
     RETIF(gaussSeidelCuda2, 2);
     RETIF(gaussSeidelCustom, 1);
     RETIF(jacobi, 1);
+    RETIF(cudss, 1);
 #undef RETIF
     return {0, 0};
 }
@@ -308,7 +333,7 @@ int main(int argc, char ** argv)
         return 1;
     }
 
-    const int maxIters = 100;
+    const int maxIters = 1000;
     const float eps = 1e-9;
 
     std::vector<float> x;
