@@ -34,6 +34,10 @@ NsConfig parseNsConfig(const std::string & fileName)
     PARSE(chorinCuda.pressureSolver.targetMse);
     PARSE(chorinCuda.pressureSolver.mseCheckInterval);
 
+    PARSE(chorinCuda.dbgDumps.enabled);
+    PARSE(chorinCuda.dbgDumps.dir);
+    PARSE(chorinCuda.dbgDumps.mod);
+
     PARSE(output.ext);
     PARSE(output.frameStep);
     PARSE(output.velocityStep);

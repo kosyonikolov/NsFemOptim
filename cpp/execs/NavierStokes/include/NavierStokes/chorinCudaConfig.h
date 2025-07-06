@@ -15,6 +15,14 @@ struct ChorinCudaConfig
 {
     SolverConfig velocitySolver;
     SolverConfig pressureSolver;
+
+    struct
+    {
+        bool enabled = false;
+
+        std::string dir = "dumps_cuda";
+        int mod = 100;
+    } dbgDumps;
 };
 
 #endif /* EXECS_NAVIERSTOKES_INCLUDE_NAVIERSTOKES_CHORINCUDACONFIG */

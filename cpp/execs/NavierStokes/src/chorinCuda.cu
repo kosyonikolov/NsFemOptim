@@ -1,6 +1,7 @@
 #include <NavierStokes/chorinCuda.h>
 
 #include <cassert>
+#include <filesystem>
 #include <format>
 #include <stdexcept>
 
@@ -152,6 +153,11 @@ struct PressureSolver
     }
 };
 
+void printDebugFileName(const std::string & fileName)
+{
+    std::cout << "\e[1;33m" << fileName << "\e[0m\n";
+}
+
 Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
                            const DfgConditions & cond, const float timeStep0, const float maxT,
                            const ChorinCudaConfig & cfg)
@@ -164,6 +170,33 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
     float plusOne = 1.0f;
 
     auto ctx = buildChorinContext(velocityMesh, pressureMesh, cond);
+
+    // ======= Debug dumps =======
+    const auto dumpCfg = cfg.dbgDumps;
+    const bool dbgDumps = dumpCfg.enabled;
+    const std::string dumpDir = dumpCfg.dir;
+    if (dbgDumps)
+    {
+        std::filesystem::create_directories(dumpDir);
+
+        // Dump matrices
+        auto dump = [dumpDir](const std::string & name, const linalg::CsrMatrix<float> & m)
+        {
+            const std::string outFname = dumpDir + "/" + name + ".bin";
+            printDebugFileName(outFname);
+            linalg::write(outFname, m);
+        };
+
+#define DUMP(x) dump(#x, ctx.x)
+        DUMP(velocityMass);
+        DUMP(velocityStiffness);
+        DUMP(pressureStiffness);
+        DUMP(pressureStiffnessInternal);
+        DUMP(velocityPressureDiv);
+        DUMP(pressureVelocityDiv);
+        DUMP(fastConvectionIntegration);
+#undef DUMP
+    }
 
     // Create CUDA matrices
     cu::csrF velocityMass(ctx.velocityMass);
@@ -227,11 +260,9 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
     Solution result;
     result.steps.resize(numTimeSteps + 1);
 
-    // ======= Debug dumps =======
-    const std::string dumpDir = "dumps_cuda";
-    const bool dbgDumps = false;
+    // CPU vectors for debug dumps
+    std::vector<float> dbgAccelRhsXy(velocitySolver->getRhs().size());
     std::vector<float> dbgVelocityXy(velocityXy.size());
-    // std::vector<float> dbgPressureRhs(pressureSolver.rhs.size());
     std::vector<float> dbgPressureRhs(pressureSolver.solver.getRhs().size());
     std::vector<float> dbgInternalP(ctx.internalPressureNodes.size());
     std::vector<float> dbgFullP(numPressureNodes);
@@ -247,6 +278,8 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
 
         LogEntry currLog;
         currLog.id = iT;
+
+        const bool dumpNow = dbgDumps && (iT % dumpCfg.mod == 0);
 
         // Update convection
         auto & currConvection = fcSpmv.b;
@@ -271,6 +304,14 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
 
         auto & accelRhs = velocitySolver->getRhs();
         aSpmm.compute(velocityXy, accelRhs);
+        if (dumpNow)
+        {
+            accelRhs.download(dbgAccelRhsXy);
+            const std::string outFname = std::format("{}/{}_tentativeRhsXy.bin", dumpDir, iT);
+            printDebugFileName(outFname);
+            linalg::write(outFname, dbgAccelRhsXy);
+        }
+
         accel.memsetZero();
         velocitySolver->solve();
         currLog.mseTentative[0] = velocitySolver->getLastMse(0);
@@ -285,10 +326,12 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
 
         // Reimpose BCs
         dirichletVelocity.impose();
-        if (dbgDumps)
+        if (dumpNow)
         {
             velocityXy.download(dbgVelocityXy);
-            linalg::write(std::format("{}/{}_tentativeVxy.bin", dumpDir, iT), dbgVelocityXy);
+            const std::string outFname = std::format("{}/{}_tentativeVxy.bin", dumpDir, iT);
+            printDebugFileName(outFname);
+            linalg::write(outFname, dbgVelocityXy);
         }
         currLog.tTentative = sw.millis(true);
         // =========================================================================================
@@ -309,23 +352,31 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         pressureSolver.update();
         currLog.msePressure = pressureSolver.solver.getLastMse();
         currLog.itersPressure = pressureSolver.solver.getLastIterations();
-        if (dbgDumps)
+        if (dumpNow)
         {
             // pressureSolver.rhs.download(dbgPressureRhs);
             pressureSolver.solver.getRhs().download(dbgPressureRhs);
-            linalg::write(std::format("{}/{}_pressureRhs.bin", dumpDir, iT), dbgPressureRhs);
+            const std::string outFname = std::format("{}/{}_pressureRhs.bin", dumpDir, iT);
+            printDebugFileName(outFname);
+            linalg::write(outFname, dbgPressureRhs);
         }
 
         auto & pressure = pressureSolver.dense;
         assert(pressure.size() == numPressureNodes);
 
-        if (dbgDumps)
+        if (dumpNow)
         {
             // pressureSolver.internalPressure.download(dbgInternalP);
             pressureSolver.solver.getSol().download(dbgInternalP);
             pressure.download(dbgFullP);
-            linalg::write(std::format("{}/{}_internalP.bin", dumpDir, iT), dbgInternalP);
-            linalg::write(std::format("{}/{}_fullP.bin", dumpDir, iT), dbgFullP);
+
+            std::string outFname = std::format("{}/{}_internalP.bin", dumpDir, iT);
+            printDebugFileName(outFname);
+            linalg::write(outFname, dbgInternalP);
+
+            outFname = std::format("{}/{}_fullP.bin", dumpDir, iT);
+            printDebugFileName(outFname);
+            linalg::write(outFname, dbgFullP);
         }
 
         // Copy to output
@@ -345,8 +396,15 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
 
         // nablaPXy = pressureVelocityDiv * pressure;
         pvdSpmv.compute(pressure, nablaPXy);
-
         nablaPXy.copyTo(accelRhs); // TODO Can we compute in accelRhs directly?
+        if (dumpNow)
+        {
+            accelRhs.download(dbgAccelRhsXy);
+            const std::string outFname = std::format("{}/{}_finalRhsXy.bin", dumpDir, iT);
+            printDebugFileName(outFname);
+            linalg::write(outFname, dbgAccelRhsXy);
+        }
+
         accel.memsetZero();
         velocitySolver->solve();
         currLog.mseFinal[0] = velocitySolver->getLastMse(0);
@@ -360,6 +418,14 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         cu::saxpy(blas, 2 * numVelocityNodes, accel.get(), velocityXy.get(), -tau);
 
         dirichletVelocity.impose();
+
+        if (dumpNow)
+        {
+            velocityXy.download(dbgVelocityXy);
+            const std::string outFname = std::format("{}/{}_finalVxy.bin", dumpDir, iT);
+            printDebugFileName(outFname);
+            linalg::write(outFname, dbgVelocityXy);
+        }
 
         // Copy to output
         auto & outVelocity = result.steps[iT].velocity;
