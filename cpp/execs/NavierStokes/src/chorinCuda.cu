@@ -8,14 +8,15 @@
 #include <cu/csrF.h>
 #include <cu/solvers/solverFactory.h>
 #include <cu/sparse.h>
-#include <cu/spmv.h>
 #include <cu/spmm.h>
+#include <cu/spmv.h>
 
 #include <linalg/io.h>
 
 #include <utils/stopwatch.h>
 
 #include <NavierStokes/buildContext.h>
+#include <NavierStokes/log.h>
 
 struct DirichletVelocity
 {
@@ -158,6 +159,8 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
     cu::Blas blas;
     cu::Sparse sparse;
 
+    Log log("chorin_cuda.csv");
+
     float plusOne = 1.0f;
 
     auto ctx = buildChorinContext(velocityMesh, pressureMesh, cond);
@@ -233,10 +236,17 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
     std::vector<float> dbgInternalP(ctx.internalPressureNodes.size());
     std::vector<float> dbgFullP(numPressureNodes);
 
+    u::Stopwatch globalSw;
+    float lastPrintTime = 0;
+    constexpr float printIntervalMs = 500;
+
     for (int iT = 0; iT <= numTimeSteps; iT++)
     {
         u::Stopwatch bigSw;
         u::Stopwatch sw;
+
+        LogEntry currLog;
+        currLog.id = iT;
 
         // Update convection
         auto & currConvection = fcSpmv.b;
@@ -252,22 +262,21 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         {
             throw std::runtime_error(std::format("cublasSgeam failed: {}", cublasGetStatusName(blasRc)));
         }
-        const auto tConvection = sw.millis(true);
 
         // =========================================================================================
-        // Find tentative velocity in two steps:
-        // 1) Compute accelRhsC = A * velocityC
-        // 2) Solve M0 * accelC = accelRhsC
-        // Solve for X and Y simultaneously
+        // Find tentative velocity in three steps:
+        // 1) Compute accelRhsXy = A * velocityXy
+        // 2) Solve M0 * accelXy = accelRhsXy
+        // 3) Apply the acceleration
 
         auto & accelRhs = velocitySolver->getRhs();
         aSpmm.compute(velocityXy, accelRhs);
         accel.memsetZero();
         velocitySolver->solve();
-        const float mseTentX = velocitySolver->getLastMse(0);
-        const float mseTentY = velocitySolver->getLastMse(1);
-        const int tentIters = velocitySolver->getLastIterations();
-        if (!std::isfinite(mseTentX) || !std::isfinite(mseTentY))
+        currLog.mseTentative[0] = velocitySolver->getLastMse(0);
+        currLog.mseTentative[1] = velocitySolver->getLastMse(1);
+        currLog.itersTentative = velocitySolver->getLastIterations();
+        if (!std::isfinite(currLog.mseTentative[0]) || !std::isfinite(currLog.mseTentative[1]))
         {
             throw std::runtime_error("Tentative acceleration is bad");
         }
@@ -281,7 +290,7 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
             velocityXy.download(dbgVelocityXy);
             linalg::write(std::format("{}/{}_tentativeVxy.bin", dumpDir, iT), dbgVelocityXy);
         }
-        const auto tTentative = sw.millis(true);
+        currLog.tTentative = sw.millis(true);
         // =========================================================================================
 
         // =========================================================================================
@@ -298,8 +307,8 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         cu::scale(blas, pressureSolver.dense.size(), pressureSolver.dense.get(), invTau);
 
         pressureSolver.update();
-        const float msePressure = pressureSolver.solver.getLastMse();
-        const int pressureIters = pressureSolver.solver.getLastIterations();
+        currLog.msePressure = pressureSolver.solver.getLastMse();
+        currLog.itersPressure = pressureSolver.solver.getLastIterations();
         if (dbgDumps)
         {
             // pressureSolver.rhs.download(dbgPressureRhs);
@@ -319,14 +328,11 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
             linalg::write(std::format("{}/{}_fullP.bin", dumpDir, iT), dbgFullP);
         }
 
-        const auto tPressure = sw.millis(true);
-
         // Copy to output
         auto & outP = result.steps[iT].pressure;
         outP.resize(numPressureNodes);
         pressure.download(outP);
-
-        const auto tPressureDownload = sw.millis();
+        currLog.tPressure = sw.millis(true);
         // =========================================================================================
 
         // =========================================================================================
@@ -343,10 +349,10 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         nablaPXy.copyTo(accelRhs); // TODO Can we compute in accelRhs directly?
         accel.memsetZero();
         velocitySolver->solve();
-        const float mseFinalX = velocitySolver->getLastMse(0);
-        const float mseFinalY = velocitySolver->getLastMse(1);
-        const int finalIters = velocitySolver->getLastIterations();
-        if (!std::isfinite(mseFinalX) || !std::isfinite(mseFinalY))
+        currLog.mseFinal[0] = velocitySolver->getLastMse(0);
+        currLog.mseFinal[1] = velocitySolver->getLastMse(1);
+        currLog.itersFinal = velocitySolver->getLastIterations();
+        if (!std::isfinite(currLog.mseFinal[0]) || !std::isfinite(currLog.mseFinal[1]))
         {
             throw std::runtime_error("Final acceleration is bad");
         }
@@ -355,24 +361,38 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
 
         dirichletVelocity.impose();
 
-        const float tFinal = sw.millis(true);
-
         // Copy to output
         auto & outVelocity = result.steps[iT].velocity;
         outVelocity.resize(velocityXy.size());
         velocityXy.download(outVelocity);
 
-        const float tFinalDownload = sw.millis();
-        const float tIter = bigSw.millis();
+        currLog.tFinal = sw.millis();
+        currLog.tTotal = bigSw.millis();
+        log.add(currLog);
         // =========================================================================================
 
-        std::cout << std::format("{} / {}: {} ms\n", iT, numTimeSteps, tIter);
-        std::cout << std::format("\tconvection = {}, tentative = {}, pressure = {}, pressureDownload = {}, final = {}, finalDownload = {}\n",
-                                 tConvection, tTentative, tPressure, tPressureDownload, tFinal, tFinalDownload);
-        std::cout << std::format("\tMSEs: tent (X / Y / iters) = {} / {} / {}, pressure = {} / {}, final (X / Y / iters) = {} / {} / {}\n",
-                                 mseTentX, mseTentY, tentIters,
-                                 msePressure, pressureIters, 
-                                 mseFinalX, mseFinalY, finalIters);
+        // Print progress info
+        const auto elapsedTime = globalSw.millis();
+        const auto delta = elapsedTime - lastPrintTime;
+        if (delta >= printIntervalMs)
+        {
+            const int numDone = iT + 1;
+            const int numRemaining = numTimeSteps - iT;
+            float avgIterTime = -1;
+            float remTime = -1;
+            if (numDone > 0)
+            {
+                avgIterTime = elapsedTime / numDone;
+                remTime = numRemaining * avgIterTime;
+            }
+
+            const int percent = 100 * numDone / (numTimeSteps + 1);
+
+            std::cout << std::format("{} / {} ({}%): avgIterTime = {} ms, elapsed = {} s, remaining = {} s\n",
+                                     numDone, numTimeSteps + 1, percent, avgIterTime, elapsedTime / 1000.0f, remTime / 1000.0f);
+
+            lastPrintTime = elapsedTime;
+        }
     }
 
     return result;
