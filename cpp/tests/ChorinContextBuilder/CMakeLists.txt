@@ -1,0 +1,3 @@
+add_executable(ChorinContextBuilder src/chorinContextBuilder.cpp)
+
+target_link_libraries(ChorinContextBuilder Fem Utils)
