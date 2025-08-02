@@ -309,8 +309,9 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             linalg::write(std::format("{}/{}_tentativeRhs.bin", dumpDir, iT), tentRhs);
         }
 
-        constexpr double eps = 1e-6;
-        linalg::gaussSeidel2ch(velocityMassCsr, tentAcc, tentRhs, 100, eps);
+        constexpr double gsEps = 1e-6;
+        constexpr int gsMaxIters = 100;
+        linalg::gaussSeidel2ch(velocityMassCsr, tentAcc, tentRhs, gsMaxIters, gsEps);
 
         // Update the velocity
         for (int i = 0; i < 2 * numVelocityNodes; i++)
@@ -433,32 +434,34 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         // Then update: u_{i+1} = u_* + tau * a
         Vector nablaPXy = pressureVelocityDiv * pressure;
         const auto tCalcNablaPxy = sw.millis(true);
-        Eigen::Matrix<SolType, Eigen::Dynamic, 2> nablaP(numVelocityNodes, 2);
+
+        // Reuse the interleaved velocity buffers
+        auto & finalAccRhs = tentRhs;
+        auto & finalAcc = tentAcc;
+        assert(finalAccRhs.size() == 2 * numVelocityNodes);
+        assert(finalAcc.size() == 2 * numVelocityNodes);
         for (int i = 0; i < numVelocityNodes; i++)
         {
-            nablaP(i, 0) = nablaPXy(i);
-            nablaP(i, 1) = nablaPXy(i + numVelocityNodes);
+            finalAccRhs[2 * i + 0] = nablaPXy(i);
+            finalAccRhs[2 * i + 1] = nablaPXy(i + numVelocityNodes);
         }
         const auto tCalcNablaP = sw.millis(true);
 
         if (dbgDumps)
         {
-            for (int i = 0; i < numVelocityNodes; i++)
-            {
-                dbgFinalAccRhs[2 * i + 0] = nablaP(i, 0);
-                dbgFinalAccRhs[2 * i + 1] = nablaP(i, 1);
-            }
-            linalg::write(std::format("{}/{}_accelFinalRhs.bin", dumpDir, iT), dbgFinalAccRhs);
+            linalg::write(std::format("{}/{}_accelFinalRhs.bin", dumpDir, iT), finalAccRhs);
         }
 
-        Eigen::Matrix<SolType, Eigen::Dynamic, 2> accelFinal = velocityMassSolver.solve(nablaP);
+        linalg::gaussSeidel2ch(velocityMassCsr, finalAcc, finalAccRhs, gsMaxIters, gsEps);
         const auto tSolveFinal = sw.millis(true);
 
         for (int i = 0; i < numVelocityNodes; i++)
         {
+            const float ax = finalAcc[2 * i + 0];
+            const float ay = finalAcc[2 * i + 1];
             // clang-format off
-            velocityX[i] = tentativeVelocityXy(i)                    - tau * accelFinal(i, 0);
-            velocityY[i] = tentativeVelocityXy(i + numVelocityNodes) - tau * accelFinal(i, 1);
+            velocityX[i] = tentativeVelocityXy(i)                    - tau * ax;
+            velocityY[i] = tentativeVelocityXy(i + numVelocityNodes) - tau * ay;
             // clang-format on
         }
 
