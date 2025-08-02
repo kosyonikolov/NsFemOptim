@@ -18,6 +18,7 @@
 
 #include <NavierStokes/buildContext.h>
 #include <NavierStokes/log.h>
+#include <NavierStokes/progressTracker.h>
 
 struct DirichletVelocity
 {
@@ -267,9 +268,7 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
     std::vector<float> dbgInternalP(ctx.internalPressureNodes.size());
     std::vector<float> dbgFullP(numPressureNodes);
 
-    u::Stopwatch globalSw;
-    float lastPrintTime = 0;
-    constexpr float printIntervalMs = 500;
+    ProgressTracker progressTracker(numTimeSteps);
 
     for (int iT = 0; iT <= numTimeSteps; iT++)
     {
@@ -438,27 +437,7 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         // =========================================================================================
 
         // Print progress info
-        const auto elapsedTime = globalSw.millis();
-        const auto delta = elapsedTime - lastPrintTime;
-        if (delta >= printIntervalMs)
-        {
-            const int numDone = iT + 1;
-            const int numRemaining = numTimeSteps - iT;
-            float avgIterTime = -1;
-            float remTime = -1;
-            if (numDone > 0)
-            {
-                avgIterTime = elapsedTime / numDone;
-                remTime = numRemaining * avgIterTime;
-            }
-
-            const int percent = 100 * numDone / (numTimeSteps + 1);
-
-            std::cout << std::format("{} / {} ({}%): avgIterTime = {} ms, elapsed = {} s, remaining = {} s\n",
-                                     numDone, numTimeSteps + 1, percent, avgIterTime, elapsedTime / 1000.0f, remTime / 1000.0f);
-
-            lastPrintTime = elapsedTime;
-        }
+        progressTracker.update(iT);
     }
 
     return result;

@@ -29,6 +29,8 @@
 #include <NavierStokes/dfgCondtions.h>
 #include <NavierStokes/nsConfig.h>
 #include <NavierStokes/solution.h>
+#include <NavierStokes/log.h>
+#include <NavierStokes/progressTracker.h>
 
 using SolType = float;
 using SpMat = Eigen::SparseMatrix<SolType, Eigen::RowMajor>;
@@ -268,14 +270,18 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         linalg::write(dumpDir + "/velocityMass.bin", velocityMassCsr);
     }
 
+    Log log("chorin_eigen.csv");
+    ProgressTracker progressTracker(numTimeSteps);
+
     std::cout << "Solving...\n";
     for (int iT = 0; iT <= numTimeSteps; iT++)
     {
         u::Stopwatch bigSw;
         u::Stopwatch sw;
 
+        LogEntry currLog;
+
         const float currTime = iT * tau;
-        std::cout << std::format("{} / {}: time = {}\n", iT, numTimeSteps, currTime);
         result.steps[iT].time = currTime;
 
         // 1) Find the tentative velocity
@@ -285,7 +291,6 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         // The system for a is [M 0; 0 M] [a_x; a_y] = [A 0; 0 A] [q_x; q_y], where A = viscosity * M1 + C
         // Since the system is effectively the same for a_x and a_y, we can solve M [a_x a_y] = A [q_x q_y]
         fastConvection.update(velocityXy);
-        const auto tAsmConvection = sw.millis(true);
 
         A = A0 + fastConvection.convection;
         Eigen::Matrix<SolType, Eigen::Dynamic, 2> velocityMatrix(numVelocityNodes, 2);
@@ -311,7 +316,10 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
         constexpr double gsEps = 1e-6;
         constexpr int gsMaxIters = 100;
-        linalg::gaussSeidel2ch(velocityMassCsr, tentAcc, tentRhs, gsMaxIters, gsEps);
+        auto [mseTentX, mseTentY] = linalg::gaussSeidel2ch(velocityMassCsr, tentAcc, tentRhs, gsMaxIters, gsEps);
+        currLog.mseTentative[0] = mseTentX;
+        currLog.mseTentative[1] = mseTentY;
+        currLog.itersTentative = 0; // Not recorded
 
         // Update the velocity
         for (int i = 0; i < 2 * numVelocityNodes; i++)
@@ -333,7 +341,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             linalg::write(std::format("{}/{}_tentativeVxy.bin", dumpDir, iT), dbgVelocityXy);
         }
 
-        const auto tTentative = sw.millis(true);
+        currLog.tTentative = sw.millis(true);
 
         if (false)
         {
@@ -427,13 +435,14 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             outP[i] = pressure[i];
         }
 
-        const auto tPressure = sw.millis(true);
+        currLog.tPressure = sw.millis(true);
+        currLog.itersPressure = 1;
+        currLog.msePressure = 0;
 
         // 3) Find the final velocity by updating the tentative
         // (u_{i+1} - u_*) / tau = -nabla(p) <=> a = nabla(p) <=> (a, v) = (nabla(p), v)
         // Then update: u_{i+1} = u_* + tau * a
         Vector nablaPXy = pressureVelocityDiv * pressure;
-        const auto tCalcNablaPxy = sw.millis(true);
 
         // Reuse the interleaved velocity buffers
         auto & finalAccRhs = tentRhs;
@@ -445,15 +454,16 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             finalAccRhs[2 * i + 0] = nablaPXy(i);
             finalAccRhs[2 * i + 1] = nablaPXy(i + numVelocityNodes);
         }
-        const auto tCalcNablaP = sw.millis(true);
 
         if (dbgDumps)
         {
             linalg::write(std::format("{}/{}_accelFinalRhs.bin", dumpDir, iT), finalAccRhs);
         }
 
-        linalg::gaussSeidel2ch(velocityMassCsr, finalAcc, finalAccRhs, gsMaxIters, gsEps);
-        const auto tSolveFinal = sw.millis(true);
+        auto [finalMseX, finalMseY] = linalg::gaussSeidel2ch(velocityMassCsr, finalAcc, finalAccRhs, gsMaxIters, gsEps);
+        currLog.mseFinal[0] = finalMseX;
+        currLog.mseFinal[1] = finalMseY;
+        currLog.itersFinal = 0; // Not recorded
 
         for (int i = 0; i < numVelocityNodes; i++)
         {
@@ -465,9 +475,10 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             // clang-format on
         }
 
-        const auto tUpdateFinal = sw.millis();
-
         imposeDirichletVelocity();
+
+        currLog.tFinal = sw.millis();
+
         result.steps[iT].velocity = velocityXy;
 
         if (false)
@@ -481,9 +492,10 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
             drawVelocity(std::format("velocity_{}", iT), dbgVelocityX, dbgVelocityY, "FINAL");
         }
 
-        const auto tIter = bigSw.millis();
-        std::cout << std::format("Total time = {}, assemble convection = {}, tentative = {}, pressure = {}, nablaPxy = {}, nablaP = {}, solveFinal = {}, updateFinal = {}\n",
-                                 tIter, tAsmConvection, tTentative, tPressure, tCalcNablaPxy, tCalcNablaP, tSolveFinal, tUpdateFinal);
+        currLog.tTotal = bigSw.millis();
+        log.add(currLog);
+
+        progressTracker.update(iT);
     }
 
     return result;
