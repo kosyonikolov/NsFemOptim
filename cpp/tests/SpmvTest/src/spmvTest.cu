@@ -326,9 +326,6 @@ void testDot(const int n)
 
 int main(int argc, char ** argv)
 {
-    testDot(1 << 20);
-    return 0;
-
     const std::string usageMsg = "./SpmvTest <csr matrix>";
     if (argc != 2)
     {
@@ -336,13 +333,104 @@ int main(int argc, char ** argv)
         return 1;
     }
 
-    // testMemorySpeed();
-
     const std::string matrixFname = argv[1];
 
     auto m = linalg::readCsr<float>(matrixFname);
+    std::cout << std::format("Matrix size: {}x{}\n", m.rows, m.cols);
+    if (m.cols != m.rows)
+    {
+        std::cerr << "Square matrix expected!\n";
+        return 1;
+    }
 
-    testCuCsrFSpmv(m);
+    const int n = m.rows;
+    std::vector<float> src(n);
+    std::default_random_engine rng(20250803);
+    std::uniform_real_distribution<float> dist(-1, 1);
+    for (int i = 0; i < n; i++)
+    {
+        src[i] = dist(rng);
+    }
+
+    std::vector<float> dstS(n), dstP(n);
+
+    const int numRuns = 8;
+    const int maxThreads = 8;
+
+    std::vector<std::vector<float>> times(maxThreads);
+    for (int i = 0; i < maxThreads; i++)
+    {
+        times[i].resize(numRuns);
+        const int numThreads = i + 1;
+        u::Stopwatch sw;
+        if (numThreads == 1)
+        {
+            for (int j = 0; j < numRuns; j++)
+            {
+                sw.reset();
+                m.rMult(src, dstS);
+                times[i][j] = sw.millis();
+                std::cout << std::format("Serial {}/{}: {} ms\n", j + 1, numRuns, times[i][j]);
+            }
+        }
+        else
+        {
+            ParallelSpmv<float> pSpmv(m, numThreads);
+            for (int j = 0; j < numRuns; j++)
+            {
+                sw.reset();
+                pSpmv.rMult(src, dstP);
+                times[i][j] = sw.millis();
+                std::cout << std::format("Parallel[{}] {}/{}: {} ms\n", numThreads, j + 1, numRuns, times[i][j]);
+            }
+
+            int numDiff = 0;
+            for (int k = 0; k < n; k++)
+            {
+                if (dstP[k] != dstS[k])
+                {
+                    numDiff++;
+                }
+            }
+            if (numDiff > 0)
+            {
+                std::cerr << "!!! Different elements: " << numDiff << " !!!\n";
+            }
+        }
+    }
+
+    std::vector<float> matrixCopyTimes(numRuns);
+    std::vector<float> vectorCopyTimes(numRuns);
+    auto otherM = m;
+    u::Stopwatch sw;
+    for (int i = 0; i < numRuns; i++)
+    {
+        sw.reset();
+        std::copy(src.begin(), src.end(), dstS.begin());
+        vectorCopyTimes[i] = sw.millis(true);
+        std::copy(m.values.begin(), m.values.end(), otherM.values.begin());
+        std::copy(m.column.begin(), m.column.end(), otherM.column.begin());
+        std::copy(m.rowStart.begin(), m.rowStart.end(), otherM.rowStart.begin());
+        matrixCopyTimes[i] = sw.millis();
+        std::cout << std::format("Copy {}/{}: vector = {} ms, matrix = {} ms\n", i + 1, numRuns, vectorCopyTimes[i], matrixCopyTimes[i]);
+    }
+
+    // Print table
+    std::cout << "Run";
+    for (int i = 0; i < maxThreads; i++)
+    {
+        std::cout << "\t" << i + 1 << "T";
+    }
+    std::cout << "\tVector\tMatrix\n";
+    for (int i = 0; i < numRuns; i++)
+    {
+        std::cout << i + 1;
+        for (int j = 0; j < maxThreads; j++)
+        {
+            std::cout << "\t" << times[j][i];
+        }
+        std::cout << "\t" << vectorCopyTimes[i] << "\t" << matrixCopyTimes[i] << "\n";
+    }
 
     return 0;
 }
