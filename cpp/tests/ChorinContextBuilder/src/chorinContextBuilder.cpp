@@ -46,7 +46,7 @@ int main(int argc, char ** argv)
     const std::string meshFile = argv[1];
 
     const auto triMesh = mesh::parseTriangleGmsh(meshFile);
-    std::cout << std::format("Nodes = {}, elements = {}\n", triMesh.nodes.size(), triMesh.elements.size());
+    std::cout << std::format("Nodes = {}, triangles = {}\n", triMesh.nodes.size(), triMesh.elements.size());
 
     const auto velocityElement = el::createElement(el::Type::P2);
     const auto pressureElement = el::createElement(el::Type::P1);
@@ -54,6 +54,8 @@ int main(int argc, char ** argv)
 
     const auto velocityMesh = mesh::createMesh(triMesh, *velocityElement);
     const auto pressureMesh = mesh::createMesh(triMesh, *pressureElement);
+
+    std::cout << std::format("Velocity nodes = {}, pressure nodes = {}\n", velocityMesh.nodes.size(), pressureMesh.nodes.size());
 
     const int nThreads = 8;
     auto matrices = fem::buildChorinCsrMatrices<float>(velocityMesh, pressureMesh, integrationDegree, nThreads);
