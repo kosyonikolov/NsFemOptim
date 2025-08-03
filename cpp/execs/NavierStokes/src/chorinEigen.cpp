@@ -280,6 +280,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         u::Stopwatch sw;
 
         LogEntry currLog;
+        currLog.id = iT;
 
         const float currTime = iT * tau;
         result.steps[iT].time = currTime;
