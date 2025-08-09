@@ -34,10 +34,48 @@ size_t csrSize(const linalg::CsrMatrix<F> & m)
     return sum;
 }
 
+void measureBuildTimes(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
+                       const int integrationDegree, const int maxThreads)
+{
+    const int numRuns = 16;
+    std::vector<std::vector<float>> times(maxThreads);
+    for (int i = 0; i < maxThreads; i++)
+    {
+        const int numThreads = i + 1;
+        auto & currT = times[i];
+        currT.resize(numRuns);
+        for (int j = 0; j < numRuns; j++)
+        {
+            u::Stopwatch sw;
+            auto matrices = fem::buildChorinCsrMatrices<float>(velocityMesh, pressureMesh, integrationDegree, numThreads);
+            const float t = sw.millis();
+            currT[j] = t;
+            std::cout << std::format("Threads [{}] {}/{}: {} ms\n", numThreads, j + 1, numRuns, t);
+        }
+    }
+
+    std::cout << "run";
+    for (int i = 0; i < maxThreads; i++)
+    {
+        std::cout << "," << i + 1 << "T";
+    }
+    std::cout << "\n";
+
+    for (int j = 0; j < numRuns; j++)
+    {
+        std::cout << j + 1;
+        for (int i = 0; i < maxThreads; i++)
+        {
+            std::cout << "," << times[i][j];
+        }
+        std::cout << "\n";
+    }
+}
+
 int main(int argc, char ** argv)
 {
-    const std::string usageMsg = "./ChorinContextBuilder <mesh file>";
-    if (argc != 2)
+    const std::string usageMsg = "./ChorinContextBuilder <mesh file> [-m]";
+    if (argc < 2)
     {
         std::cerr << usageMsg << "\n";
         return 1;
@@ -56,6 +94,12 @@ int main(int argc, char ** argv)
     const auto pressureMesh = mesh::createMesh(triMesh, *pressureElement);
 
     std::cout << std::format("Velocity nodes = {}, pressure nodes = {}\n", velocityMesh.nodes.size(), pressureMesh.nodes.size());
+    if (argc > 2 && std::string(argv[2]) == "-m")
+    {
+        std::cout << "Measuring matrix assembly times\n";
+        measureBuildTimes(velocityMesh, pressureMesh, integrationDegree, 8);
+        return 0;
+    }
 
     const int nThreads = 8;
     auto matrices = fem::buildChorinCsrMatrices<float>(velocityMesh, pressureMesh, integrationDegree, nThreads);
