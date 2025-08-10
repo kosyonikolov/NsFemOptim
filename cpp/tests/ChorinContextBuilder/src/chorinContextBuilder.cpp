@@ -1,5 +1,6 @@
 #include <format>
 #include <iostream>
+#include <random>
 #include <string>
 
 #include <opencv2/opencv.hpp>
@@ -11,9 +12,11 @@
 
 #include <fem/chorinCsr.h>
 #include <fem/fastConvection.h>
+#include <fem/slowConvection.h>
 
 #include <linalg/csrMatrix.h>
 #include <linalg/eigen.h>
+#include <linalg/io.h>
 
 #include <utils/stopwatch.h>
 
@@ -72,9 +75,86 @@ void measureBuildTimes(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
     }
 }
 
+void measureConvectionTimes(const mesh::ConcreteMesh & velocityMesh, const int integrationDegree, const std::vector<float> & velocityXy)
+{
+    el::TriangleIntegrator integrator(velocityMesh.baseElement, integrationDegree);
+
+    fem::FastConvection fast(velocityMesh, integrator);
+    fem::SlowConvection slow(velocityMesh, integrator);
+
+    auto & fastConv = fast.convection;
+    auto & slowConv = slow.convection;
+
+    const int n = velocityMesh.nodes.size();
+    if (velocityXy.size() != 2 * n)
+    {
+        std::cerr << "VelocityXy vector has a wrong size!\n";
+        return;
+    }
+    if (slowConv.rows() != n || slowConv.cols() != n)
+    {
+        std::cerr << "Bad slow convection format!\n";
+        return;
+    }
+    if (fastConv.rows() != n || fastConv.cols() != n)
+    {
+        std::cerr << "Bad fast convection format!\n";
+        return;
+    }
+    const int nnz = fastConv.nonZeros();
+    if (nnz != slowConv.nonZeros())
+    {
+        std::cerr << "Mismatch between nnz of the two matrices!\n";
+        return;
+    }
+
+    {
+        const auto colPtrFast = fastConv.innerIndexPtr();
+        const auto colPtrSlow = slowConv.innerIndexPtr();
+        for (int i = 0; i < nnz; i++)
+        {
+            if (colPtrFast[i] != colPtrSlow[i])
+            {
+                std::cerr << "Mismatch in sprase structure!\n";
+                return;
+            }
+        }
+    }
+
+    float * fastVals = fastConv.valuePtr();
+    float * slowVals = slowConv.valuePtr();
+
+    const int numRuns = 16;
+    std::vector<float> timesFast(numRuns);
+    std::vector<float> timesSlow(numRuns);
+
+    for (int i = 0; i < numRuns; i++)
+    {
+        u::Stopwatch sw;
+        fast.update(velocityXy);
+        timesFast[i] = sw.millis(true);
+        slow.update(velocityXy);
+        timesSlow[i] = sw.millis();
+
+        double sumSq = 0;
+        float absMax = 0;
+        for (int j = 0; j < nnz; j++)
+        {
+            const float fastVal = fastVals[j];
+            const float slowVal = slowVals[j];
+            const float d = std::abs(fastVal - slowVal);
+            absMax = std::max(absMax, d);
+            sumSq += d * d;
+        }
+        const float mse = std::sqrt(sumSq / nnz);
+        std::cout << std::format("Run {}/{}: fast = {} ms, slow = {} ms, absMax = {}, mse = {}\n",
+                                 i + 1, numRuns, timesFast[i], timesSlow[i], absMax, mse);
+    }
+}
+
 int main(int argc, char ** argv)
 {
-    const std::string usageMsg = "./ChorinContextBuilder <mesh file> [-m]";
+    const std::string usageMsg = "./ChorinContextBuilder <mesh file> (nothing | -m | -p <velocityXy>)";
     if (argc < 2)
     {
         std::cerr << usageMsg << "\n";
@@ -98,6 +178,13 @@ int main(int argc, char ** argv)
     {
         std::cout << "Measuring matrix assembly times\n";
         measureBuildTimes(velocityMesh, pressureMesh, integrationDegree, 8);
+        return 0;
+    }
+    if (argc == 4 && std::string(argv[2]) == "-p")
+    {
+        std::cout << "Measure convection assembly times\n";
+        auto velocityXy = linalg::readVec<float>(argv[3]);
+        measureConvectionTimes(velocityMesh, integrationDegree, velocityXy);
         return 0;
     }
 

@@ -1,6 +1,6 @@
 #include <fem/fastConvection.h>
 
-// #include <utils/stopwatch.h>
+#include <utils/stopwatch.h>
 
 namespace fem
 {
@@ -51,6 +51,9 @@ namespace fem
         for (int i = 0; i < nElems; i++)
         {
             velocityMesh.getElement(i, ids.data(), 0);
+
+            // u::Stopwatch sw;
+
             // The ids determine the E-idx (row idx)
             // Calculate them once
             for (int r = 0; r < elSize; r++)
@@ -65,6 +68,8 @@ namespace fem
                     rowIndices(r, c) = idx;
                 }
             }
+
+            // const auto tRowIndices = 1000 * sw.millis();
 
             // Set each velocity component to 1 and calculate the contribution
             for (int iVxy = 0; iVxy < 2 * elSize; iVxy++)
@@ -89,6 +94,9 @@ namespace fem
                     }
                 }
             }
+
+            // const auto tMatrices = 1000 * sw.millis();
+            // std::cout << "Row indices = " << tRowIndices << " us, matrices = " << tMatrices << " us\n"; 
         }
         integration.setFromTriplets(integrationTriplets.begin(), integrationTriplets.end());
 
