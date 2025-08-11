@@ -1,6 +1,5 @@
 #include <format>
 #include <iostream>
-#include <random>
 #include <string>
 
 #include <opencv2/opencv.hpp>
@@ -13,6 +12,7 @@
 #include <fem/chorinCsr.h>
 #include <fem/fastConvection.h>
 #include <fem/slowConvection.h>
+#include <fem/verySlowConvection.h>
 
 #include <linalg/csrMatrix.h>
 #include <linalg/eigen.h>
@@ -79,8 +79,15 @@ void measureConvectionTimes(const mesh::ConcreteMesh & velocityMesh, const int i
 {
     el::TriangleIntegrator integrator(velocityMesh.baseElement, integrationDegree);
 
+    u::Stopwatch setupSw;
     fem::FastConvection fast(velocityMesh, integrator);
+    const auto tSetupFast = setupSw.millis(true);
     fem::SlowConvection slow(velocityMesh, integrator);
+    const auto tSetupSlow = setupSw.millis(false);
+    fem::VerySlowConvection verySlow(velocityMesh, integrator);
+
+    std::cout << std::format("Setup times: fast = {} ms, slow = {} ms\n", tSetupFast, tSetupSlow);
+    // return;
 
     auto & fastConv = fast.convection;
     auto & slowConv = slow.convection;
@@ -127,6 +134,7 @@ void measureConvectionTimes(const mesh::ConcreteMesh & velocityMesh, const int i
     const int numRuns = 16;
     std::vector<float> timesFast(numRuns);
     std::vector<float> timesSlow(numRuns);
+    std::vector<float> timesVerySlow(numRuns);
 
     for (int i = 0; i < numRuns; i++)
     {
@@ -134,7 +142,30 @@ void measureConvectionTimes(const mesh::ConcreteMesh & velocityMesh, const int i
         fast.update(velocityXy);
         timesFast[i] = sw.millis(true);
         slow.update(velocityXy);
-        timesSlow[i] = sw.millis();
+        timesSlow[i] = sw.millis(true);
+        auto verySlowConv = verySlow.calculate(velocityXy);
+        timesVerySlow[i] = sw.millis();
+
+        double vsSumSq = 0;
+        float vsAbsMax = 0;
+        float vsMse = 0;
+        if (verySlowConv.rows() != n || verySlowConv.cols() != n || verySlowConv.nonZeros() != nnz)
+        {
+            std::cerr << "Bad very slow conv!\n";
+        }
+        else
+        {
+            const float * verySlowVals = verySlowConv.valuePtr();
+            for (int j = 0; j < nnz; j++)
+            {
+                const float fastVal = fastVals[j];
+                const float slowVal = verySlowVals[j];
+                const float d = std::abs(fastVal - slowVal);
+                vsAbsMax = std::max(vsAbsMax, d);
+                vsSumSq += d * d;
+            }
+            vsMse = std::sqrt(vsSumSq / nnz);
+        }
 
         double sumSq = 0;
         float absMax = 0;
@@ -147,8 +178,15 @@ void measureConvectionTimes(const mesh::ConcreteMesh & velocityMesh, const int i
             sumSq += d * d;
         }
         const float mse = std::sqrt(sumSq / nnz);
-        std::cout << std::format("Run {}/{}: fast = {} ms, slow = {} ms, absMax = {}, mse = {}\n",
-                                 i + 1, numRuns, timesFast[i], timesSlow[i], absMax, mse);
+        std::cout << std::format("Run {}/{}: fast = {} ms, slow = {} ms, very slow = {} ms, absMax / mse slow = {} / {}, absMax / mse very slow = {} / {}\n",
+                                 i + 1, numRuns, timesFast[i], timesSlow[i], timesVerySlow[i],
+                                 absMax, mse, vsAbsMax, vsMse);
+    }
+
+    std::cout << "run,fast,slow,very_slow\n";
+    for (int i = 0; i < numRuns; i++)
+    {
+        std::cout << i + 1 << "," << timesFast[i] << "," << timesSlow[i] << "," << timesVerySlow[i] << "\n";
     }
 }
 

@@ -1,6 +1,7 @@
 add_library(Fem src/chorinMatrices.cpp src/chorinCsr.cpp
                 src/fastConvection.cpp
-                src/slowConvection.cpp)
+                src/slowConvection.cpp
+                src/verySlowConvection.cpp)
 target_include_directories(Fem PUBLIC include/)
 target_link_libraries(Fem PUBLIC LinAlg Mesh Element)
 target_link_libraries(Fem PRIVATE Utils)
