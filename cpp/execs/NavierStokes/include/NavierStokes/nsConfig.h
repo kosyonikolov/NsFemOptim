@@ -23,6 +23,8 @@ struct NsConfig
         float velocityStep = 0.025;
         float velocityScale = 0.05;
         float imgScale = 800;
+
+        int pressureSkipSteps = 5;
     } output;   
 };
 

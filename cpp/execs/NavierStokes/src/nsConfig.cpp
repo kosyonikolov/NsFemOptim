@@ -43,6 +43,7 @@ NsConfig parseNsConfig(const std::string & fileName)
     PARSE(output.velocityStep);
     PARSE(output.velocityScale);
     PARSE(output.imgScale);
+    PARSE(output.pressureSkipSteps);
 #undef PARSE
 
     return result;

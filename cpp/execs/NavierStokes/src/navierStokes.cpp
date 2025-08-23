@@ -86,7 +86,7 @@ int main(int argc, char ** argv)
     float minP = std::numeric_limits<float>::infinity();
     float maxP = -std::numeric_limits<float>::infinity();
     const int nSteps = sol.steps.size();
-    const int skipStart = 5;
+    const int skipStart = cfg.output.pressureSkipSteps;
     // Don't consider the initial pressure levels - they will likely have a high pressure due to initial conditions
     for (int i = std::min(skipStart, std::max(nSteps - skipStart, 0)); i < nSteps; i++)
     {
