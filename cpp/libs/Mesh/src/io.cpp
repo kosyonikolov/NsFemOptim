@@ -1,8 +1,8 @@
 #include <mesh/io.h>
 
 #include <algorithm>
-#include <stdexcept>
 #include <cassert>
+#include <stdexcept>
 
 #include <mesh/gmsh.h>
 #include <mesh/triMesh.h>
@@ -24,12 +24,58 @@ namespace mesh
     };
     // clang-format on
 
+    class IdMap
+    {
+        int offset;
+        std::vector<int> m;
+        std::vector<bool> valid;
+
+    public:
+        IdMap(const int minVal, const int maxVal)
+        {
+            if (minVal > maxVal)
+            {
+                throw std::invalid_argument("minVal can't be larger than maxVal");
+            }
+            offset = minVal;
+            const int n = maxVal - minVal + 1;
+            m.resize(n, -1);
+            valid.resize(n, false);
+        }
+
+        void add(const int srcId, const int dstId)
+        {
+            const int idx = srcId - offset;
+            if (idx < 0 || idx >= m.size())
+            {
+                throw std::invalid_argument("Bad src id");
+            }
+            m[idx] = dstId;
+            valid[idx] = true;
+        }
+
+        int find(const int srcId) const
+        {
+            const int idx = srcId - offset;
+            if (idx < 0 || idx >= m.size())
+            {
+                throw std::invalid_argument("Bad src id");
+            }
+            if (!valid[idx])
+            {
+                throw std::invalid_argument("No dstId for this srcId");
+            }
+            return m[idx];
+        }
+    };
+
     template <typename T>
         requires IdStruct<T>
     std::vector<T> sortById(const std::vector<T> & v)
     {
         auto result = v;
-        std::sort(result.begin(), result.end(), [](const T & a, const T & b) { return a.id < b.id; });
+        std::sort(result.begin(), result.end(), [](const T & a, const T & b)
+                  { return a.id < b.id; });
         return result;
     }
 
@@ -48,8 +94,43 @@ namespace mesh
         return true;
     }
 
-    template<Entity E>
-    void updateEntity2GroupMap(std::map<int, int> & m, const std::vector<E> & v, const int offset)
+    // Make sure that all IDs are contiguous and start from zero
+    // The last ID will always be size(v) - 1
+    // A map from the old to new IDs is returned
+    template <typename T>
+        requires IdStruct<T>
+    IdMap ensureContiguousIds(std::vector<T> & v)
+    {
+        if (v.empty())
+        {
+            IdMap emptyMap(0, 0);
+            return emptyMap;
+        }
+
+        // Find min and max ID
+        int m = v[0].id;
+        int M = v[0].id;
+        for (const T & elem : v)
+        {
+            m = std::min<int>(m, elem.id);
+            M = std::max<int>(M, elem.id);
+        }
+
+        IdMap idMap(m, M);
+        const size_t n = v.size();
+        for (size_t i = 0; i < n; i++)
+        {
+            T & curr = v[i];
+            const int srcId = v[i].id;
+            curr.id = i;
+            idMap.add(srcId, i);
+        }
+
+        return idMap;
+    }
+
+    template <Entity E>
+    void updateEntity2GroupMap(std::map<int, int> & m, const std::vector<E> & v, const IdMap & groupIdMap)
     {
         for (const E & e : v)
         {
@@ -57,33 +138,42 @@ namespace mesh
             {
                 continue;
             }
-            const int group = e.physicalTags[0] - offset;
+            const int group = groupIdMap.find(e.physicalTags[0]);
             m[e.tag] = group;
         }
     }
 
     TriangleMesh parseTriangleGmsh(const Gmsh & gmsh)
     {
-        const auto srcNodes = sortById(gmsh.nodeSection.nodes);
-        const auto srcElements = sortById(gmsh.elementSection.elements);
-        const auto srcGroups = sortById(gmsh.physicsSection.names);
-
-        if (!checkContiguousIds(srcNodes))
+        if (gmsh.nodeSection.nodes.empty() || 
+            gmsh.elementSection.elements.empty() ||
+            gmsh.physicsSection.names.empty())
         {
-            throw std::runtime_error("Node IDs are not contiguous");
-        }
-        if (!checkContiguousIds(srcElements))
-        {
-            throw std::runtime_error("Element IDs are not contiguous");
-        }
-        if (!checkContiguousIds(srcGroups))
-        {
-            throw std::runtime_error("Physical group IDs are not contiguous");
+            throw std::invalid_argument("Mesh is missing required sections!");
         }
 
-        const int nodeIdOffset = srcNodes[0].id;
-        // const int elemIdOffset = srcElements[0].id;
-        const int groupIdOffset = srcGroups[0].id;
+        auto srcNodes = sortById(gmsh.nodeSection.nodes);
+        auto srcElements = sortById(gmsh.elementSection.elements);
+        auto srcGroups = sortById(gmsh.physicsSection.names);
+
+        // The IDs are not always contiguous, so we remap them
+        IdMap nodeMap = ensureContiguousIds(srcNodes);
+        IdMap elementMap = ensureContiguousIds(srcElements);
+        IdMap groupMap = ensureContiguousIds(srcGroups);
+
+        assert(srcNodes[0].id == 0);
+        assert(srcElements[0].id == 0);
+        assert(srcGroups[0].id == 0);
+
+        // Update the elements with the new node IDs
+        for (auto & element : srcElements)
+        {
+            for (auto & nodeId : element.points)
+            {
+                const int newId = nodeMap.find(nodeId);
+                nodeId = newId;
+            }
+        }
 
         const int numNodes = srcNodes.size();
         const int numAllElements = srcElements.size();
@@ -100,16 +190,14 @@ namespace mesh
         result.groups.resize(srcGroups.size());
         for (const auto & group : srcGroups)
         {
-            result.groups[group.id - groupIdOffset] = group.name;
+            assert(group.id >= 0 && group.id < result.groups.size());
+            result.groups[group.id] = group.name;
         }
 
         // Create a map from entity tag to group id - for border elements
         std::map<int, int> entity2group;
         // !!! Only use the curves - the different groups reuse ID's and we only care about the 1D borders !!!
-        // updateEntity2GroupMap(entity2group, gmsh.entitySection.points, groupIdOffset);
-        updateEntity2GroupMap(entity2group, gmsh.entitySection.curves, groupIdOffset);
-        // updateEntity2GroupMap(entity2group, gmsh.entitySection.surfaces, groupIdOffset);
-        // updateEntity2GroupMap(entity2group, gmsh.entitySection.volumes, groupIdOffset);
+        updateEntity2GroupMap(entity2group, gmsh.entitySection.curves, groupMap);
 
         // Extract border elements as an adjacency list
         // Do this first so that we can assign each edge to a triangle later
@@ -120,7 +208,7 @@ namespace mesh
             bool claimed = false;
         };
         std::vector<std::vector<Edge>> edges(numNodes);
-        
+
         int numBorder = 0;
         for (const auto & elem : srcElements)
         {
@@ -129,8 +217,10 @@ namespace mesh
                 continue;
             }
             numBorder++;
-            const int from = elem.points[0] - nodeIdOffset;
-            const int to = elem.points[1] - nodeIdOffset;
+            const int from = elem.points[0];
+            assert(from >= 0 && from < numNodes);
+            const int to = elem.points[1];
+            assert(to >= 0 && to < numNodes);
             const int group = entity2group[elem.entity];
             edges[from].push_back({to, group});
         }
@@ -147,7 +237,7 @@ namespace mesh
             std::array<int, 3> points;
             for (size_t i = 0; i < points.size(); i++)
             {
-                points[i] = elem.points[i] - nodeIdOffset;
+                points[i] = elem.points[i];
             }
             result.elements.push_back(points);
         }
@@ -159,7 +249,7 @@ namespace mesh
         }
 
         // -1 if no edge exists
-        auto getBorderEdge = [&](const int from, const int to) -> Edge*
+        auto getBorderEdge = [&](const int from, const int to) -> Edge *
         {
             assert(from >= 0 && from < numNodes);
             assert(to >= 0 && to < numNodes);
@@ -194,7 +284,7 @@ namespace mesh
                 // Sanity checks
                 assert(e->to == to);
                 assert(e->claimed == false);
-                
+
                 e->claimed = true;
                 BorderElement borderElement;
                 borderElement.element = i;

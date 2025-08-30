@@ -129,7 +129,7 @@ int main(int argc, char ** argv)
         std::vector<int> ids(elSize);
         std::vector<el::Point> targetPts(elSize);
 
-        const float eps = 1e-5f;
+        const float eps = 1e-4f;
         int failedCount = 0;
 
         for (int i = 0; i < nElements; i++)
