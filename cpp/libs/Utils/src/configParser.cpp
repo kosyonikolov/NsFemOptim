@@ -80,4 +80,28 @@ namespace u
         v = it->second;
         return true;
     }
+
+    bool ConfigParser::parse(const std::string & key, bool & v)
+    {
+        auto it = m.find(key);
+        if (it == m.end())
+        {
+            return false;
+        }
+
+        const std::string str = it->second;
+        if (str == "false" || str == "False" || str == "0")
+        {
+            v = false;
+            return true;
+        }
+
+        if (str == "true" || str == "True" || str == "1")
+        {
+            v = true;
+            return true;
+        }
+
+        return false;
+    }
 }

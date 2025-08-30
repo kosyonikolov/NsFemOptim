@@ -19,15 +19,18 @@ public:
 
 private:
     OutputConfig cfg;
+    std::string outputDir;
 
     const mesh::ConcreteMesh & velocityMesh;
     const mesh::ConcreteMesh & pressureMesh;
 
     std::vector<StoredStep> storedSteps;
+
+    // Used for binary dumps
     int storedStepId = 0;
 
 public:
-    BasicOutputHandler(const OutputConfig & cfg,
+    BasicOutputHandler(const OutputConfig & cfg, const std::string & outputDir,
                        const mesh::ConcreteMesh & velocityMesh, 
                        const mesh::ConcreteMesh & pressureMesh);
 
@@ -35,7 +38,7 @@ public:
 
     void finishOutput(const TimeStepOutput & output);
 
-    void writeOutput(const std::string & outputDir);
+    void writeOutput();
 
     ~BasicOutputHandler();
 };

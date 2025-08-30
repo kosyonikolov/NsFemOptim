@@ -36,6 +36,8 @@ namespace u
             }
             return false;
         }
+
+        bool parse(const std::string & key, bool & v);
     };
 } // namespace u
 

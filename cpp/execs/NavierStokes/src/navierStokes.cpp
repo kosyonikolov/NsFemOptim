@@ -58,7 +58,7 @@ int main(int argc, char ** argv)
     const float tau = cfg.tau;
     const float maxT = cfg.maxT;
 
-    BasicOutputHandler outputHandler(cfg.output, velocityMesh, pressureMesh);
+    BasicOutputHandler outputHandler(cfg.output, outputDir, velocityMesh, pressureMesh);
 
     std::cout << "Algorithm = " << cfg.algo << "\n";
     if (cfg.algo == "chorinEigen")
@@ -72,7 +72,7 @@ int main(int argc, char ** argv)
         solveNsChorinCuda(velocityMesh, pressureMesh, cond, tau, maxT, cfg.chorinCuda, outputHandler);
     }
 
-    outputHandler.writeOutput(outputDir);
+    outputHandler.writeOutput();
 
     return 0;
 }

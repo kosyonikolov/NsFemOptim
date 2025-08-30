@@ -4,16 +4,24 @@
 
 #include <opencv2/opencv.hpp>
 
+#include <linalg/io.h>
+
 #include <mesh/interpolator.h>
 #include <mesh/colorScale.h>
 #include <mesh/drawMesh.h>
 
-BasicOutputHandler::BasicOutputHandler(const OutputConfig & cfg,
+BasicOutputHandler::BasicOutputHandler(const OutputConfig & cfg, const std::string & outputDir,
                                        const mesh::ConcreteMesh & velocityMesh,
                                        const mesh::ConcreteMesh & pressureMesh)
-    : cfg(cfg), velocityMesh(velocityMesh), pressureMesh(pressureMesh)
+    : cfg(cfg), outputDir(outputDir), velocityMesh(velocityMesh), pressureMesh(pressureMesh)
 {
+    std::filesystem::create_directories(outputDir);
 
+    if (cfg.writeBinary && !cfg.writeImages)
+    {
+        // We need only one stored step - we're going to write it to disk as soon as it's ready
+        storedSteps.emplace_back();
+    }
 }
 
 TimeStepOutput BasicOutputHandler::getCurrentOutput(const size_t iter, const float time)
@@ -21,10 +29,22 @@ TimeStepOutput BasicOutputHandler::getCurrentOutput(const size_t iter, const flo
     TimeStepOutput out;
     out.iter = iter;
     out.time = time;
+    out.pressure = 0;
+    out.velocity = 0;
+
+    if (!cfg.writeBinary && !cfg.writeImages)
+    {
+        // No output at all
+        return out;
+    }
 
     if (iter % cfg.frameStep == 0)
     {
-        storedSteps.emplace_back();
+        if (cfg.writeImages)
+        {
+            // If we want output images, we need to store all frames
+            storedSteps.emplace_back();
+        }
         auto & last = storedSteps.back();
         out.velocity = &last.velocity;
         out.pressure = &last.pressure;
@@ -33,15 +53,27 @@ TimeStepOutput BasicOutputHandler::getCurrentOutput(const size_t iter, const flo
     return out;
 }
 
-void BasicOutputHandler::finishOutput(const TimeStepOutput &)
+void BasicOutputHandler::finishOutput(const TimeStepOutput & output)
 {
-    // Can't do anything - we have to wait for all frames to determine the pressure's scale
-    // Perhaps if we want only the raw number we could save them here
+    const bool haveVelocity = output.velocity != 0;
+    const bool havePressure = output.pressure != 0;
+    if (cfg.writeBinary && haveVelocity && havePressure)
+    {
+        const std::string outFnameVelocity = std::format("{}/velocity_{}.bin", outputDir, storedStepId);
+        const std::string outFnamePressure = std::format("{}/pressure_{}.bin", outputDir, storedStepId);
+        storedStepId++;
+        // std::cout << outFnameVelocity << ", " << outFnamePressure << "\n";
+        linalg::write(outFnameVelocity, *output.velocity);
+        linalg::write(outFnamePressure, *output.pressure);
+    }
 }
 
-void BasicOutputHandler::writeOutput(const std::string & outputDir)
+void BasicOutputHandler::writeOutput()
 {
-    std::filesystem::create_directories(outputDir);
+    if (!cfg.writeImages)
+    {
+        return;
+    }
 
     // Find range of pressure
     float minP = std::numeric_limits<float>::infinity();

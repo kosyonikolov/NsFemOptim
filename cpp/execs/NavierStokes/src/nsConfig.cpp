@@ -38,6 +38,8 @@ NsConfig parseNsConfig(const std::string & fileName)
     PARSE(chorinCuda.dbgDumps.dir);
     PARSE(chorinCuda.dbgDumps.mod);
 
+    PARSE(output.writeBinary);
+    PARSE(output.writeImages);
     PARSE(output.ext);
     PARSE(output.frameStep);
     PARSE(output.velocityStep);

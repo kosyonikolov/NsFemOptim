@@ -5,6 +5,9 @@
 
 struct OutputConfig
 {
+    bool writeBinary = false;
+    bool writeImages = true;
+
     std::string ext = "ppm";
     int frameStep = 1;
     float velocityStep = 0.025;
