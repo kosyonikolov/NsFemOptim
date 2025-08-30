@@ -47,8 +47,9 @@ void downloadEigen(const Vector & src, std::vector<float> & dst)
     }
 }
 
-Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
-                            const DfgConditions & cond, const float timeStep0, const float maxT)
+void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
+                        const DfgConditions & cond, const float timeStep0, const float maxT,
+                        AbstractOutputHandler & outputHandler)
 {
     assert(velocityMesh.groups.size() == pressureMesh.groups.size());
     assert(velocityMesh.numElements == pressureMesh.numElements);
@@ -185,8 +186,6 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
     const int numTimeSteps = std::ceil(maxT / timeStep0);
     const float tau = maxT / numTimeSteps;
-    Solution result;
-    result.steps.resize(numTimeSteps + 1);
 
     Eigen::SimplicialLDLT<SpMat> velocityMassSolver(velocityMass);
     Eigen::SimplicialLDLT<SpMat> pressureStiffnessSolver(pressureInternalStiffness);
@@ -283,7 +282,7 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         currLog.id = iT;
 
         const float currTime = iT * tau;
-        result.steps[iT].time = currTime;
+        auto currOutput = outputHandler.getCurrentOutput(iT, currTime);
 
         // 1) Find the tentative velocity
         // The original equation is u_t = u_i + tau(-u_i . nabla(u_i) + viscosity * delta(u_i))
@@ -429,13 +428,16 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
         }
 
         // Copy pressure to output
-        auto & outP = result.steps[iT].pressure;
-        outP.resize(numPressureNodes);
-        for (int i = 0; i < numPressureNodes; i++)
+        if (currOutput.pressure)
         {
-            outP[i] = pressure[i];
+            auto & outP = *currOutput.pressure;
+            outP.resize(numPressureNodes);
+            for (int i = 0; i < numPressureNodes; i++)
+            {
+                outP[i] = pressure[i];
+            }
         }
-
+        
         currLog.tPressure = sw.millis(true);
         currLog.itersPressure = 1;
         currLog.msePressure = 0;
@@ -480,7 +482,12 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
         currLog.tFinal = sw.millis();
 
-        result.steps[iT].velocity = velocityXy;
+        if (currOutput.velocity)
+        {
+            auto & outV = *currOutput.velocity;
+            outV = velocityXy;
+        }
+        outputHandler.finishOutput(currOutput);
 
         if (false)
         {
@@ -498,6 +505,4 @@ Solution solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh:
 
         progressTracker.update(iT);
     }
-
-    return result;
 }

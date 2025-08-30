@@ -4,6 +4,7 @@
 #include <string>
 
 #include <NavierStokes/chorinCudaConfig.h>
+#include <NavierStokes/outputConfig.h>
 
 struct NsConfig
 {
@@ -16,16 +17,7 @@ struct NsConfig
 
     ChorinCudaConfig chorinCuda;
 
-    struct
-    {
-        std::string ext = "ppm";
-        int frameStep = 1;
-        float velocityStep = 0.025;
-        float velocityScale = 0.05;
-        float imgScale = 800;
-
-        int pressureSkipSteps = 5;
-    } output;   
+    OutputConfig output;   
 };
 
 NsConfig parseNsConfig(const std::string & fileName);

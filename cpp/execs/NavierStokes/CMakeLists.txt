@@ -5,7 +5,8 @@ add_executable(NavierStokes src/navierStokes.cpp
                             src/buildContext.cpp
                             src/chorinCuda.cu
                             src/log.cpp
-                            src/progressTracker.cpp)
+                            src/progressTracker.cpp
+                            src/basicOutputHandler.cpp)
 target_link_libraries(NavierStokes Mesh Utils LinAlg Fem CudaUtils)
 target_include_directories(NavierStokes PRIVATE include/)
 

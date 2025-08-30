@@ -1,21 +1,18 @@
 #include <cassert>
-#include <filesystem>
-#include <format>
 #include <iostream>
 #include <string>
 
-#include <mesh/colorScale.h>
 #include <mesh/drawMesh.h>
 #include <mesh/io.h>
-#include <mesh/triangleLookup.h>
 
 #include <element/factory.h>
 
-#include <NavierStokes/chorinEigen.h>
+#include <NavierStokes/basicOutputHandler.h>
+#include <NavierStokes/buildContext.h>
 #include <NavierStokes/chorinCuda.h>
+#include <NavierStokes/chorinEigen.h>
 #include <NavierStokes/nsConfig.h>
 #include <NavierStokes/solution.h>
-#include <NavierStokes/buildContext.h>
 
 int main(int argc, char ** argv)
 {
@@ -31,6 +28,7 @@ int main(int argc, char ** argv)
     const std::string outputDir = argv[3];
 
     auto cfg = parseNsConfig(cfgFname);
+    cfg.output.peakVelocity = cfg.peakVelocity;
 
     std::cout << "Parsing mesh... ";
     std::cout.flush();
@@ -57,66 +55,24 @@ int main(int argc, char ** argv)
     cond.viscosity = cfg.viscosity;
     cond.peakVelocity = cfg.peakVelocity;
 
-    // const auto context = buildChorinContext(velocityMesh, pressureMesh, cond);
-    // {
-    //     const bool ok = context.velocityStiffness.compareLayout(context.convection);
-    //     if (!ok)
-    //     {
-    //         std::cerr << "Velocity stiffness has different layout compared to convection!\n";
-    //         return 1;
-    //     }
-    // }
-
     const float tau = cfg.tau;
     const float maxT = cfg.maxT;
-    Solution sol;
+
+    BasicOutputHandler outputHandler(cfg.output, velocityMesh, pressureMesh);
+
     std::cout << "Algorithm = " << cfg.algo << "\n";
     if (cfg.algo == "chorinEigen")
     {
         std::cout << "Using CPU Eigen-based Chorin method\n";
-        sol = solveNsChorinEigen(velocityMesh, pressureMesh, cond, tau, maxT);
+        solveNsChorinEigen(velocityMesh, pressureMesh, cond, tau, maxT, outputHandler);
     }
     else if (cfg.algo == "chorinCuda")
     {
         std::cout << "Using CUDA Chorin method\n";
-        sol = solveNsChorinCuda(velocityMesh, pressureMesh, cond, tau, maxT, cfg.chorinCuda);
+        solveNsChorinCuda(velocityMesh, pressureMesh, cond, tau, maxT, cfg.chorinCuda, outputHandler);
     }
 
-    // Find range of pressure
-    float minP = std::numeric_limits<float>::infinity();
-    float maxP = -std::numeric_limits<float>::infinity();
-    const int nSteps = sol.steps.size();
-    const int skipStart = cfg.output.pressureSkipSteps;
-    // Don't consider the initial pressure levels - they will likely have a high pressure due to initial conditions
-    for (int i = std::min(skipStart, std::max(nSteps - skipStart, 0)); i < nSteps; i++)
-    {
-        const auto & p = sol.steps[i].pressure;
-        auto [minIt, maxIt] = std::minmax_element(p.begin(), p.end());
-        minP = std::min(minP, *minIt);
-        maxP = std::max(maxP, *maxIt);
-    }
-    maxP += 1e-3f;
-    std::vector<cv::Scalar> colors{cv::Scalar(128, 0, 0), cv::Scalar(0, 0, 128), cv::Scalar(0, 200, 200)};
-    mesh::SimpleColorScale pressureColorScale(minP, maxP, colors);
-
-    std::filesystem::create_directories(outputDir);
-
-    mesh::TriangleLookup lookup(velocityMesh, 0.05);
-    const float velocityStep = cfg.output.velocityStep;
-    const float velocityScale = cfg.output.velocityScale / cfg.peakVelocity;
-    int j = 0;
-    const auto outputExt = cfg.output.ext;
-    for (int i = 0; i < sol.steps.size(); i += cfg.output.frameStep, j++)
-    {
-        const auto & s = sol.steps[i];
-        const cv::Mat img = mesh::drawCfd(lookup, pressureColorScale, 800,
-                                          velocityScale, velocityStep,
-                                          velocityMesh, pressureMesh,
-                                          s.velocity, s.pressure);
-        const std::string outFname = std::format("{}/out_{}.{}", outputDir, j, outputExt);
-        std::cout << outFname << "\n";
-        cv::imwrite(outFname, img);
-    }
+    outputHandler.writeOutput(outputDir);
 
     return 0;
 }

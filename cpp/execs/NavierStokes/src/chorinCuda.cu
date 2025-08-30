@@ -159,9 +159,9 @@ void printDebugFileName(const std::string & fileName)
     std::cout << "\e[1;33m" << fileName << "\e[0m\n";
 }
 
-Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
-                           const DfgConditions & cond, const float timeStep0, const float maxT,
-                           const ChorinCudaConfig & cfg)
+void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
+                       const DfgConditions & cond, const float timeStep0, const float maxT,
+                       const ChorinCudaConfig & cfg, AbstractOutputHandler & outputHandler)
 {
     cu::Blas blas;
     cu::Sparse sparse;
@@ -258,8 +258,6 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
     const int numTimeSteps = std::ceil(maxT / timeStep0);
     const float tau = maxT / numTimeSteps;
     const float invTau = -1.0f / tau;
-    Solution result;
-    result.steps.resize(numTimeSteps + 1);
 
     // CPU vectors for debug dumps
     std::vector<float> dbgAccelRhsXy(velocitySolver->getRhs().size());
@@ -277,6 +275,9 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
 
         LogEntry currLog;
         currLog.id = iT;
+
+        const float currTime = iT * tau;
+        auto currOutput = outputHandler.getCurrentOutput(iT, currTime);
 
         const bool dumpNow = dbgDumps && (iT % dumpCfg.mod == 0);
 
@@ -379,9 +380,12 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         }
 
         // Copy to output
-        auto & outP = result.steps[iT].pressure;
-        outP.resize(numPressureNodes);
-        pressure.download(outP);
+        if (currOutput.pressure)
+        {
+            auto & outP = *currOutput.pressure;
+            outP.resize(numPressureNodes);
+            pressure.download(outP);
+        }        
         currLog.tPressure = sw.millis(true);
         // =========================================================================================
 
@@ -427,10 +431,14 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         }
 
         // Copy to output
-        auto & outVelocity = result.steps[iT].velocity;
-        outVelocity.resize(velocityXy.size());
-        velocityXy.download(outVelocity);
-
+        if (currOutput.velocity)
+        {
+            auto & outVelocity = *currOutput.velocity;
+            outVelocity.resize(velocityXy.size());
+            velocityXy.download(outVelocity);
+        }
+        outputHandler.finishOutput(currOutput);
+        
         currLog.tFinal = sw.millis();
         currLog.tTotal = bigSw.millis();
         log.add(currLog);
@@ -439,6 +447,4 @@ Solution solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::
         // Print progress info
         progressTracker.update(iT);
     }
-
-    return result;
 }
