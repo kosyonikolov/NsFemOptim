@@ -1,0 +1,2 @@
+add_executable(MeshConverterVp src/meshConverterVp.cpp)
+target_link_libraries(MeshConverterVp Mesh Fem)
