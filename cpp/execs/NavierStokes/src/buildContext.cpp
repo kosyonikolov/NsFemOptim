@@ -7,12 +7,11 @@
 
 #include <element/triangleIntegrator.h>
 
+#include <fem/borders.h>
 #include <fem/chorinCsr.h>
 #include <fem/fastConvection.h>
 
 #include <utils/stopwatch.h>
-
-#include <NavierStokes/borders.h>
 
 fem::ChorinContextF buildChorinContext(const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
                                        const DfgConditions & cond)
@@ -82,15 +81,15 @@ fem::ChorinContextF buildChorinContext(const mesh::ConcreteMesh & velocityMesh, 
 
     // Velocity
     const std::vector<int> velocityBorderIds = {idLeft, idTop, idBottom, idCircle};
-    result.dirichletVx = extractDirichletNodes(velocityMesh, velocityBorderIds, calcDirichletVx);
-    result.dirichletVy = extractDirichletNodes(velocityMesh, velocityBorderIds, dirichletZero);
+    result.dirichletVx = fem::extractDirichletNodes(velocityMesh, velocityBorderIds, calcDirichletVx);
+    result.dirichletVy = fem::extractDirichletNodes(velocityMesh, velocityBorderIds, dirichletZero);
     assert(result.dirichletVx.size() == result.dirichletVy.size());
-    result.internalVelocityNodes = extractInternalNodes(numVelocityNodes, result.dirichletVx);
+    result.internalVelocityNodes = fem::extractInternalNodes(numVelocityNodes, result.dirichletVx);
 
     // Pressure
     const std::vector<int> pressureBorderIds = {idRight};
-    result.dirichletPressure = extractDirichletNodes(pressureMesh, pressureBorderIds, dirichletZero);
-    result.internalPressureNodes = extractInternalNodes(numPressureNodes, result.dirichletPressure);
+    result.dirichletPressure = fem::extractDirichletNodes(pressureMesh, pressureBorderIds, dirichletZero);
+    result.internalPressureNodes = fem::extractInternalNodes(numPressureNodes, result.dirichletPressure);
     // const int numInternalPressureNodes = result.internalPressureNodes.size();
     std::cout << "Done\n";
     // =========================================================================================================

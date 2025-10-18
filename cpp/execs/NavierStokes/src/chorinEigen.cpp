@@ -21,16 +21,16 @@
 
 #include <utils/stopwatch.h>
 
+#include <fem/borders.h>
 #include <fem/chorinMatrices.h>
 #include <fem/dirichletNode.h>
 #include <fem/fastConvection.h>
 
-#include <NavierStokes/borders.h>
 #include <NavierStokes/dfgCondtions.h>
-#include <NavierStokes/nsConfig.h>
-#include <NavierStokes/solution.h>
 #include <NavierStokes/log.h>
+#include <NavierStokes/nsConfig.h>
 #include <NavierStokes/progressTracker.h>
+#include <NavierStokes/solution.h>
 
 using SolType = float;
 using SpMat = Eigen::SparseMatrix<SolType, Eigen::RowMajor>;
@@ -112,14 +112,14 @@ void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::Con
 
     // Velocity
     const std::vector<int> velocityBorderIds = {idLeft, idTop, idBottom, idCircle};
-    const auto dirichletVx = extractDirichletNodes(velocityMesh, velocityBorderIds, calcDirichletVx);
-    const auto dirichletVy = extractDirichletNodes(velocityMesh, velocityBorderIds, dirichletZero);
+    const auto dirichletVx = fem::extractDirichletNodes(velocityMesh, velocityBorderIds, calcDirichletVx);
+    const auto dirichletVy = fem::extractDirichletNodes(velocityMesh, velocityBorderIds, dirichletZero);
     assert(dirichletVx.size() == dirichletVy.size());
     const auto internalVelocityNodes = extractInternalNodes(numVelocityNodes, dirichletVx);
 
     // Pressure
     const std::vector<int> pressureBorderIds = {idRight};
-    const auto dirichletPressure = extractDirichletNodes(pressureMesh, pressureBorderIds, dirichletZero);
+    const auto dirichletPressure = fem::extractDirichletNodes(pressureMesh, pressureBorderIds, dirichletZero);
     const auto internalPressureNodes = extractInternalNodes(numPressureNodes, dirichletPressure);
     const int numInternalPressureNodes = internalPressureNodes.size();
     std::cout << "Done\n";
@@ -437,7 +437,7 @@ void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::Con
                 outP[i] = pressure[i];
             }
         }
-        
+
         currLog.tPressure = sw.millis(true);
         currLog.itersPressure = 1;
         currLog.msePressure = 0;

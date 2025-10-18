@@ -1,6 +1,5 @@
 add_executable(NavierStokes src/navierStokes.cpp
                             src/nsConfig.cpp
-                            src/borders.cpp
                             src/chorinEigen.cpp
                             src/buildContext.cpp
                             src/chorinCuda.cu
