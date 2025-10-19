@@ -7,7 +7,8 @@ add_library(CudaUtils src/sparse.cu src/vec.cu src/csrF.cu src/spmv.cu
                       src/conjGradHost.cu
                       src/spmm.cu
                       src/solvers/solverFactory.cu
-                      src/dssSolverHost.cu)
+                      src/dssSolverHost.cu
+                      src/event.cu)
 target_include_directories(CudaUtils PUBLIC include/)
 target_link_libraries(CudaUtils PUBLIC Utils LinAlg)
 

@@ -23,6 +23,12 @@ struct LogEntry
     float tFinal;
     int itersFinal;
     std::array<float, 2> mseFinal;
+
+    // CUDA times
+    float tCuConvection = 0;
+    float tCuTentative = 0;
+    float tCuPressure = 0;
+    float tCuFinal = 0;
 };
 
 class Log

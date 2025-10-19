@@ -7,6 +7,7 @@
 
 #include <cu/blas.h>
 #include <cu/csrF.h>
+#include <cu/event.h>
 #include <cu/solvers/solverFactory.h>
 #include <cu/sparse.h>
 #include <cu/spmm.h>
@@ -268,6 +269,12 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
 
     ProgressTracker progressTracker(numTimeSteps);
 
+    cu::Event cuBegin;
+    cu::Event cuConvection;
+    cu::Event cuTentative;
+    cu::Event cuPressure;
+    cu::Event cuFinal;
+
     for (int iT = 0; iT <= numTimeSteps; iT++)
     {
         u::Stopwatch bigSw;
@@ -281,9 +288,14 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
 
         const bool dumpNow = dbgDumps && (iT % dumpCfg.mod == 0);
 
+        cuBegin.record();
+
         // Update convection
         auto & currConvection = fcSpmv.b;
         fcSpmv.compute(velocityXy, currConvection);
+
+        cuConvection.record();
+
         // Calculate A = viscosity * M1 + convection
         auto & aValues = velocityStiffnessPlusConvection.values;
         blasRc = cublasSgeam(blas.handle, cublasOperation_t::CUBLAS_OP_N, cublasOperation_t::CUBLAS_OP_N,
@@ -326,6 +338,7 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
 
         // Reimpose BCs
         dirichletVelocity.impose();
+        cuTentative.record();
         if (dumpNow)
         {
             velocityXy.download(dbgVelocityXy);
@@ -350,6 +363,7 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
         cu::scale(blas, pressureSolver.dense.size(), pressureSolver.dense.get(), invTau);
 
         pressureSolver.update();
+        cuPressure.record();
         currLog.msePressure = pressureSolver.solver.getLastMse();
         currLog.itersPressure = pressureSolver.solver.getLastIterations();
         if (dumpNow)
@@ -385,7 +399,7 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
             auto & outP = *currOutput.pressure;
             outP.resize(numPressureNodes);
             pressure.download(outP);
-        }        
+        }
         currLog.tPressure = sw.millis(true);
         // =========================================================================================
 
@@ -421,6 +435,7 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
         cu::saxpy(blas, 2 * numVelocityNodes, accel.get(), velocityXy.get(), -tau);
 
         dirichletVelocity.impose();
+        cuFinal.record();
 
         if (dumpNow)
         {
@@ -438,9 +453,16 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
             velocityXy.download(outVelocity);
         }
         outputHandler.finishOutput(currOutput);
-        
+
         currLog.tFinal = sw.millis();
         currLog.tTotal = bigSw.millis();
+
+        cuFinal.sync();
+        currLog.tCuConvection = cuConvection.elapsedTimeMs(cuBegin);
+        currLog.tCuTentative = cuTentative.elapsedTimeMs(cuConvection);
+        currLog.tCuPressure = cuPressure.elapsedTimeMs(cuTentative);
+        currLog.tCuFinal = cuFinal.elapsedTimeMs(cuPressure);
+
         log.add(currLog);
         // =========================================================================================
 
