@@ -1,8 +1,9 @@
+#include <array>
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
-#include <fstream>
 
 #include <element/affineTransform.h>
 #include <element/factory.h>
@@ -21,12 +22,59 @@ struct Grid
     float scaleX, scaleY;
     std::vector<std::vector<int>> cells;
 
-    std::vector<int> & getCell(const float x, const float y)
+    int calcCellIdx(const float x, const float y)
     {
         const int ix = std::clamp<int>((x - offsetX) * scaleX, 0, numCellsH - 1);
         const int iy = std::clamp<int>((y - offsetY) * scaleY, 0, numCellsV - 1);
         const int idx = iy * numCellsH + ix;
+        return idx;
+    }
+
+    std::vector<int> & getCell(const float x, const float y)
+    {
+        const int idx = calcCellIdx(x, y);
         return cells[idx];
+    }
+
+    // Find index of node in mesh that is close enough to pt
+    // Assumes that the grid is built on mesh
+    int find(const el::Point & pt, const mesh::ConcreteMesh & mesh, const float eps)
+    {
+        const int bx = std::clamp<int>((pt.x - offsetX) * scaleX, 0, numCellsH - 1);
+        const int by = std::clamp<int>((pt.y - offsetY) * scaleY, 0, numCellsV - 1);
+
+        // clang-format off
+        constexpr int D = 9;
+        const std::array<int, D> dx = {0, -1,  0,  1, -1, 1, -1, 0, 1};
+        const std::array<int, D> dy = {0, -1, -1, -1,  0, 0,  1, 1, 1};
+        // clang-format on
+
+        // Search in the "expected" cell first, then it its neighbours
+        // The point could be there because of numerical imprecision
+        for (int i = 0; i < D; i++)
+        {
+            const int ix = bx + dx[i];
+            const int iy = by + dy[i];
+            if (ix < 0 || ix >= numCellsH || iy < 0 || iy >= numCellsV)
+            {
+                continue;
+            }
+
+            const int idx = iy * numCellsH + ix;
+            for (int j : cells[idx])
+            {
+                const auto & testPt = mesh.nodes[j];
+                const float deltaX = testPt.x - pt.x;
+                const float deltaY = testPt.y - pt.y;
+                if (std::abs(deltaX) > eps || std::abs(deltaY) > eps)
+                {
+                    continue;
+                }
+                return j;
+            }
+        }
+
+        return -1;
     }
 };
 
@@ -55,9 +103,9 @@ Grid createGrid(const mesh::ConcreteMesh & mesh)
     const int desiredNumCells = std::min(numNodes, maxNumCells);
 
     // N = (width / h) * (height / h) = (width * height) / h^2
-    // <=> h^2 = (width * height) / N <=> h = sqrt((width * height) / N) 
+    // <=> h^2 = (width * height) / N <=> h = sqrt((width * height) / N)
     const float cellSize = std::sqrt(width * height / desiredNumCells);
-    
+
     Grid result;
     result.numCellsH = std::max<int>(1, width / cellSize);
     result.numCellsV = std::max<int>(1, height / cellSize);
@@ -105,33 +153,22 @@ int main(int argc, char ** argv)
     const int nSmall = small.nodes.size();
     std::vector<int> result(nSmall, -1);
     const float eps = 1e-6;
-    int numFound = 0;
     for (int i = 0; i < nSmall; i++)
     {
         const auto refPt = small.nodes[i];
-        bool found = false;
-        auto & cell = grid.getCell(refPt.x, refPt.y);
-        for (int j : cell)
-        {
-            const auto testPt = big.nodes[j];
-            const float dx = refPt.x - testPt.x;
-            const float dy = refPt.y - testPt.y;
-            if (std::abs(dx) < eps && std::abs(dy) < eps)
-            {
-                found = true;
-                result[i] = j;
-                numFound++;
-                break;
-            }
-        }
+        const int j = grid.find(refPt, big, eps);
+        const bool found = j != -1;
+        result[i] = j;
         if (!found)
         {
             std::cerr << std::format("Node {} [{}, {}] not found in big mesh!\n", i, refPt.x, refPt.y);
         }
     }
 
+    const int numFound = std::count_if(result.begin(), result.end(), [](int x)
+                                       { return x != -1; });
     std::cout << std::format("Found points: {} / {}\n", numFound, nSmall);
-    
+
     std::ofstream file(outputFileName);
     if (!file.is_open())
     {
