@@ -14,6 +14,11 @@ struct Config
     int pressureSkipSteps = 5;
 
     int numThreads = 8;
+
+    bool dumpPressureStats = false;
+    bool manualPressure = false;
+    float minPressure = 0;
+    float maxPressure = 1;
 };
 
 Config parseConfig(const std::string & fileName);

@@ -17,11 +17,20 @@ Config parseConfig(const std::string & fileName)
     parser.populate(file);
     Config result;
 #define PARSE(x) parser.parse(#x, result.x)
-    PARSE(imgScale);
     PARSE(ext);
+    PARSE(imgScale);
+
+    PARSE(velocityStep);
+    PARSE(velocityScale);
+
     PARSE(pressureSkipSteps);
 
     PARSE(numThreads);
+
+    PARSE(dumpPressureStats);
+    PARSE(manualPressure);
+    PARSE(minPressure);
+    PARSE(maxPressure);
 #undef PARSE
 
     return result;

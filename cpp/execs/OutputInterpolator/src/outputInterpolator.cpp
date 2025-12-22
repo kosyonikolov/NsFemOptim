@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <fstream>
 
 #include <mesh/colorScale.h>
 #include <mesh/drawMesh.h>
@@ -131,6 +132,26 @@ std::vector<Triplet> findFiles(const std::string & dir)
     return result;
 }
 
+void writePressureStats(const std::vector<Triplet> & triplets, const std::string & outFileName)
+{
+    if (triplets.empty())
+    {
+        std::cerr << "!!! No triplets !!!\n";
+        return;
+    }
+
+    std::ofstream file(outFileName);
+    file << "id,min,max\n";
+
+    const size_t n = triplets.size();
+    for (size_t i = 0; i < n; i++)
+    {
+        auto curr = linalg::readVec<float>(triplets[i].pressureFname);
+        auto minMax = std::minmax_element(curr.begin(), curr.end());
+        file << std::format("{},{},{}\n", i, *minMax.first, *minMax.second);
+    }
+}
+
 PressureRange findPressureRange(const std::vector<Triplet> & triplets, int skipSteps)
 {
     if (triplets.empty())
@@ -248,7 +269,24 @@ int main(int argc, char ** argv)
     const auto triplets = findFiles(outputDir);
     std::cout << "Found " << triplets.size() << " output files\n";
 
-    const PressureRange pressureRange = findPressureRange(triplets, cfg.pressureSkipSteps);
+    if (cfg.dumpPressureStats)
+    {
+        const std::string statsFileName = "pressure_stats.csv";
+        std::cout << "Saving pressure stats to " << statsFileName << "\n";
+        writePressureStats(triplets, statsFileName);
+    }
+
+    PressureRange pressureRange;
+    if (cfg.manualPressure)
+    {
+        pressureRange.min = cfg.minPressure;
+        pressureRange.max = cfg.maxPressure;
+    }
+    else
+    {
+        pressureRange = findPressureRange(triplets, cfg.pressureSkipSteps);
+    }
+
     std::cout << std::format("Pressure range = [{}, {}]\n", pressureRange.min, pressureRange.max);
 
     std::vector<cv::Scalar> colors{cv::Scalar(128, 0, 0), cv::Scalar(0, 0, 128), cv::Scalar(0, 200, 200)};
