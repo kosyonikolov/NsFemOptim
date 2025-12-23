@@ -125,23 +125,35 @@ Grid createGrid(const mesh::ConcreteMesh & mesh)
     return result;
 }
 
+el::Type parseElementType(const std::string & name)
+{
+#define RETIF(x) if (name == #x) return el::Type::x;
+    RETIF(P0);
+    RETIF(P1);
+    RETIF(P2);
+#undef RETIF
+
+    throw std::invalid_argument(std::format("Unknown element name [{}]", name));
+}
+
 int main(int argc, char ** argv)
 {
-    const std::string usageMsg = "./MeshParser <small mesh> <big mesh> <output map file>";
-    if (argc != 4)
+    const std::string usageMsg = "./MeshParser <element name> <small mesh> <big mesh> <output map file>";
+    if (argc != 5)
     {
         std::cerr << usageMsg << "\n";
         return 1;
     }
 
-    const std::string smallFileName = argv[1];
-    const std::string bigFileName = argv[2];
-    const std::string outputFileName = argv[3];
+    const std::string elementName = argv[1];
+    const std::string smallFileName = argv[2];
+    const std::string bigFileName = argv[3];
+    const std::string outputFileName = argv[4];
 
     auto smallTri = mesh::parseTriangleGmsh(smallFileName);
     auto bigTri = mesh::parseTriangleGmsh(bigFileName);
 
-    const auto elementType = el::Type::P2;
+    const auto elementType = parseElementType(elementName);
     const auto baseElement = el::createElement(elementType);
 
     auto small = mesh::createMesh(smallTri, *baseElement);
