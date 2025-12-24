@@ -22,7 +22,7 @@ namespace mesh
         const int n = colors.size();
         const float xC = std::clamp(x, min, max);
         const float idxF = (n - 1) * (xC - min) / (max - min);
-        const int idx = std::min<int>(idxF, n - 2);
+        const int idx = std::clamp<int>(idxF, 0, n - 2);
         const float k = idxF - idx;
 
         const auto low = colors[idx];
