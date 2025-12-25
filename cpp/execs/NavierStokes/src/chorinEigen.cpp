@@ -112,6 +112,7 @@ void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::Con
 
     // Velocity
     const std::vector<int> velocityBorderIds = {idLeft, idTop, idBottom, idCircle};
+    const auto dirichletVxLeft = fem::extractDirichletNodes(velocityMesh, {idLeft}, calcDirichletVx);
     const auto dirichletVx = fem::extractDirichletNodes(velocityMesh, velocityBorderIds, calcDirichletVx);
     const auto dirichletVy = fem::extractDirichletNodes(velocityMesh, velocityBorderIds, dirichletZero);
     assert(dirichletVx.size() == dirichletVy.size());
@@ -166,8 +167,8 @@ void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::Con
     std::span<float> velocityX(velocityXy.data(), numVelocityNodes);
     std::span<float> velocityY(velocityXy.data() + numVelocityNodes, numVelocityNodes);
 
-    auto imposeDirichletVelocity = [&]()
-    {
+    auto imposeDirichletVelocity = [&](const float t)
+    {        
         for (const auto & dn : dirichletVx)
         {
             velocityX[dn.id] = dn.value;
@@ -176,9 +177,17 @@ void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::Con
         {
             velocityY[dn.id] = dn.value;
         }
+        if (cond.rampTime > 0)
+        {
+            const float k = std::clamp<float>(t / cond.rampTime, 0, 1);
+            for (const auto & dn : dirichletVxLeft)
+            {
+                velocityX[dn.id] = k * dn.value;
+            }
+        }
     };
 
-    imposeDirichletVelocity();
+    imposeDirichletVelocity(0);
 
     std::cout << "Setting up FastConvection... ";
     fem::FastConvection fastConvection(velocityMesh, velocityIntegrator);
@@ -202,7 +211,7 @@ void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::Con
 
     auto drawVelocity = [&](const std::string & prefix, const std::vector<float> & vx, const std::vector<float> & vy, const std::string & tag)
     {
-        const float eps = 1e-2;
+        const float eps = 1e-6;
         auto [minX, maxX] = std::minmax_element(vx.begin(), vx.end());
         auto [minY, maxY] = std::minmax_element(vy.begin(), vy.end());
 
@@ -282,6 +291,10 @@ void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::Con
         currLog.id = iT;
 
         const float currTime = iT * tau;
+        if (cond.rampTime > 0)
+        {
+            imposeDirichletVelocity(currTime);
+        }
         auto currOutput = outputHandler.getCurrentOutput(iT, currTime);
 
         // 1) Find the tentative velocity
@@ -478,7 +491,7 @@ void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::Con
             // clang-format on
         }
 
-        imposeDirichletVelocity();
+        imposeDirichletVelocity(currTime);
 
         currLog.tFinal = sw.millis();
 

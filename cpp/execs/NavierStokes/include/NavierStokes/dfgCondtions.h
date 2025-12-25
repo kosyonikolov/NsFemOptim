@@ -5,6 +5,7 @@ struct DfgConditions
 {
     float viscosity;
     float peakVelocity;
+    float rampTime = 0;
 
     float calcLeftVelocity(const float y) const
     {

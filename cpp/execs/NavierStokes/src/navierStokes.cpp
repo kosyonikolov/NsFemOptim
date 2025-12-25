@@ -54,6 +54,7 @@ int main(int argc, char ** argv)
     DfgConditions cond;
     cond.viscosity = cfg.viscosity;
     cond.peakVelocity = cfg.peakVelocity;
+    cond.rampTime = cfg.rampTime;
 
     const float tau = cfg.tau;
     const float maxT = cfg.maxT;
