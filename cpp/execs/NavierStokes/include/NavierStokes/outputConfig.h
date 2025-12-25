@@ -5,6 +5,9 @@
 
 struct OutputConfig
 {
+    // Don't write values for timesteps before this time
+    float skipTime = 0;
+
     bool writeBinary = false;
     bool writeImages = true;
 

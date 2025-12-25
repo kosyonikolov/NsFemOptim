@@ -38,6 +38,11 @@ TimeStepOutput BasicOutputHandler::getCurrentOutput(const size_t iter, const flo
         return out;
     }
 
+    if (time < cfg.skipTime)
+    {
+        return out;
+    }
+
     if (iter % cfg.frameStep == 0)
     {
         if (cfg.writeImages)

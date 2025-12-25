@@ -42,6 +42,7 @@ NsConfig parseNsConfig(const std::string & fileName)
 
     PARSE(output.writeBinary);
     PARSE(output.writeImages);
+    PARSE(output.skipTime);
     PARSE(output.ext);
     PARSE(output.frameStep);
     PARSE(output.velocityStep);
