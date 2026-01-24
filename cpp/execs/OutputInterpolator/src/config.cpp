@@ -31,6 +31,8 @@ Config parseConfig(const std::string & fileName)
     PARSE(manualPressure);
     PARSE(minPressure);
     PARSE(maxPressure);
+
+    PARSE(sequentialOutput);
 #undef PARSE
 
     return result;

@@ -19,6 +19,8 @@ struct Config
     bool manualPressure = false;
     float minPressure = 0;
     float maxPressure = 1;
+
+    bool sequentialOutput = false;
 };
 
 Config parseConfig(const std::string & fileName);

@@ -1,10 +1,10 @@
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <thread>
-#include <fstream>
 
 #include <mesh/colorScale.h>
 #include <mesh/drawMesh.h>
@@ -17,9 +17,10 @@
 
 #include <OutputInterpolator/config.h>
 
-struct Triplet
+struct Quadriplet
 {
-    int id;
+    int id;    // From filename
+    int seqId; // ID in sorted order
     std::string velocityFname;
     std::string pressureFname;
 };
@@ -30,7 +31,7 @@ struct PressureRange
     float max;
 };
 
-std::vector<Triplet> findFiles(const std::string & dir)
+std::vector<Quadriplet> findFiles(const std::string & dir)
 {
     struct Pair
     {
@@ -89,21 +90,23 @@ std::vector<Triplet> findFiles(const std::string & dir)
     std::sort(velocityPairs.begin(), velocityPairs.end());
     std::sort(pressurePairs.begin(), pressurePairs.end());
 
-    std::vector<Triplet> result;
+    std::vector<Quadriplet> result;
     // Merge sort ftw
     const size_t nV = velocityPairs.size();
     const size_t nP = pressurePairs.size();
     size_t iV = 0;
     size_t iP = 0;
+    int seqId = 0;
     while (iV < nV && iP < nP)
     {
         const auto & vp = velocityPairs[iV];
         const auto & pp = pressurePairs[iP];
         if (vp.id == pp.id)
         {
-            result.emplace_back(vp.id, vp.fileName, pp.fileName);
+            result.emplace_back(vp.id, seqId, vp.fileName, pp.fileName);
             iV++;
             iP++;
+            seqId++;
         }
         else if (vp.id > pp.id)
         {
@@ -132,7 +135,7 @@ std::vector<Triplet> findFiles(const std::string & dir)
     return result;
 }
 
-void writePressureStats(const std::vector<Triplet> & triplets, const std::string & outFileName)
+void writePressureStats(const std::vector<Quadriplet> & triplets, const std::string & outFileName)
 {
     if (triplets.empty())
     {
@@ -152,7 +155,7 @@ void writePressureStats(const std::vector<Triplet> & triplets, const std::string
     }
 }
 
-PressureRange findPressureRange(const std::vector<Triplet> & triplets, int skipSteps)
+PressureRange findPressureRange(const std::vector<Quadriplet> & triplets, int skipSteps)
 {
     if (triplets.empty())
     {
@@ -207,21 +210,21 @@ public:
     {
     }
 
-    void render(const Triplet & t)
+    void render(const Quadriplet & q)
     {
         const auto nV = 2 * velocityMesh.nodes.size();
         const auto nP = pressureMesh.nodes.size();
 
-        const std::string outFname = std::format("{}/out_{}.{}", outputDir, t.id, cfg.ext);
+        const std::string outFname = std::format("{}/out_{}.{}", outputDir, cfg.sequentialOutput ? q.seqId : q.id, cfg.ext);
 
-        auto velocity = linalg::readVec<float>(t.velocityFname);
+        auto velocity = linalg::readVec<float>(q.velocityFname);
         if (velocity.size() != nV)
         {
             std::cerr << "!!! SKIP " + outFname + " - velocity file has wrong size !!!\n";
             return;
         }
 
-        auto pressure = linalg::readVec<float>(t.pressureFname);
+        auto pressure = linalg::readVec<float>(q.pressureFname);
         if (pressure.size() != nP)
         {
             std::cerr << "!!! SKIP " + outFname + " - pressure file has wrong size !!!\n";
