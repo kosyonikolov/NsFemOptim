@@ -57,10 +57,73 @@ std::vector<float> createInterpolationValues(const mesh::ConcreteMesh & mesh)
     return result;
 }
 
+void analyzeMesh(const mesh::TriangleMesh & mesh)
+{
+    struct Stats
+    {
+        double sum = 0;
+        double min = std::numeric_limits<double>::max();
+        double max = std::numeric_limits<double>::min();
+        int n = 0;
+
+        void add(double val)
+        {
+            sum += val;
+            min = std::min(min, val);
+            max = std::max(max, val);
+            n++;
+        }
+
+        double average()
+        {
+            return sum / n;
+        }
+    };
+
+    // Keep track of both the biggest side and the radius of the inscribed circle
+    Stats longestSide;
+    Stats inscribedRadius;
+
+    for (const auto element : mesh.elements)
+    {
+        static_assert(element.size() == 3, "Elements must be of size 3");
+        std::array<el::Point, 3> pts;
+        for (int i = 0; i < 3; i++)
+        {
+            pts[i] = mesh.nodes[element[i]];
+        }
+
+        // Distances
+        double dx10 = pts[1].x - pts[0].x;
+        double dx20 = pts[2].x - pts[0].x;
+        double dx21 = pts[2].x - pts[1].x;
+
+        double dy10 = pts[1].y - pts[0].y;
+        double dy20 = pts[2].y - pts[0].y;
+        double dy21 = pts[2].y - pts[1].y;
+
+        double det = dx10 * dy20 - dy10 * dx20;
+        // Side length
+        double a = std::sqrt(dx10 * dx10 + dy10 * dy10);
+        double b = std::sqrt(dx20 * dx20 + dy20 * dy20);
+        double c = std::sqrt(dx21 * dx21 + dy21 * dy21);
+
+        double r = det / (a + b + c);
+        double longest = std::max({a, b, c});
+
+        longestSide.add(longest);
+        inscribedRadius.add(r);
+    }
+
+    std::cout << "metric\tmin\tmax\tavg\n";
+    std::cout << "longest_side\t" << longestSide.min << "\t" << longestSide.max << "\t" << longestSide.average() << "\n";
+    std::cout << "inscribed_radius\t" << inscribedRadius.min << "\t" << inscribedRadius.max << "\t" << inscribedRadius.average() << "\n";
+}
+
 int main(int argc, char ** argv)
 {
-    const std::string usageMsg = "./MeshParser <msh file>";
-    if (argc != 2)
+    const std::string usageMsg = "./MeshParser <msh file> [-a]";
+    if (argc < 2)
     {
         std::cerr << usageMsg << "\n";
         return 1;
@@ -74,6 +137,13 @@ int main(int argc, char ** argv)
     // dumpPhysicalGroups("groups.txt", gmsh.physicsSection);
 
     auto triMesh = mesh::parseTriangleGmsh(gmsh);
+
+    if (argc > 2 && std::string(argv[2]) == "-a")
+    {
+        std::cout << "Analyzing mesh\n";
+        analyzeMesh(triMesh);
+        return 0;
+    }
 
     if (false)
     {
