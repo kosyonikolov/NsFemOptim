@@ -203,15 +203,16 @@ std::vector<int> extractBorderPressureNodes(const mesh::ConcreteMesh & vpMesh, c
 
 int main(int argc, char ** argv)
 {
-    const std::string usageMsg = "./MeshConverterVp <msh file> [output json filename]";
-    if (argc < 2)
+    const std::string usageMsg = "./MeshConverterVp <msh file> <peak velocity> [output json filename]";
+    if (argc < 3)
     {
         std::cerr << usageMsg << "\n";
         return 1;
     }
 
     const std::string meshFileName = argv[1];
-    const std::string outFileName = argc > 2 ? argv[2] : "mesh.json";
+    const std::string peakVelocity = argv[2];
+    const std::string outFileName = argc > 3 ? argv[3] : "mesh.json";
 
     auto gmsh = mesh::parseGmsh(meshFileName);
     auto triMesh = mesh::parseTriangleGmsh(gmsh);
@@ -325,7 +326,7 @@ int main(int argc, char ** argv)
     };
 
     printBorderNodeIds(leftNodes);
-    json << "\t\t\t\"u\":\"4*1.5*y*(0.41-y)\\/(0.41*0.41)\",\n";
+    json << "\t\t\t\"u\":\"" << peakVelocity << "*y*(0.41-y)\\/(0.41*0.41)\",\n";
     json << "\t\t\t\"v\":\"0\"\n";
     json << "\t\t},\n\t\t{\n";
 
