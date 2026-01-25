@@ -75,6 +75,146 @@ struct DirichletVelocity
     void impose()
     {
         auto rc = cusparseScatter(lib.handle(), sparseVec, denseVec);
+        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
+        {
+            throw std::runtime_error(std::format("Failed to scatter velocity: {}", cusparseGetErrorName(rc)));
+        }
+    }
+};
+
+struct DirichletAcceleration
+{
+    cu::Sparse & lib;
+
+    cu::vec<float> &accel, &accelInt;
+    cu::vec<float> &rhs, &rhsInt;
+
+    cu::vec<int> internalIds;
+
+    cusparseDnVecDescr_t accelDenseVec;
+    cusparseSpVecDescr_t accelSparseVec;
+
+    cusparseDnVecDescr_t rhsDenseVec;
+    cusparseSpVecDescr_t rhsSparseVec;
+
+    DirichletAcceleration(cu::Sparse & sparseHandle,
+                          cu::vec<float> & accel, cu::vec<float> & accelInt,
+                          cu::vec<float> & rhs, cu::vec<float> & rhsInt,
+                          const std::vector<fem::DirichletNode> & x)
+        : lib(sparseHandle),
+          accel(accel), accelInt(accelInt),
+          rhs(rhs), rhsInt(rhsInt)
+    {
+        const int numNodes = accel.size();
+        assert(numNodes % 2 == 0);
+        assert(numNodes == rhs.size());
+        const int numNodesChannel = numNodes / 2;
+
+        const int numInternal = accelInt.size();
+        assert(numInternal % 2 == 0);
+        assert(numInternal == rhsInt.size());
+        const int numInternalChannel = numInternal / 2;
+
+        const int numDirichlet = x.size();
+        assert(numDirichlet + numInternalChannel == numNodesChannel);
+
+        // Extract Dirichlet node IDs and sort them
+        // Then compute the internal nodes = setdiff([0, N), dirichlet)
+        std::vector<int> dirichletIds;
+        dirichletIds.reserve(numDirichlet);
+        for (const auto & node : x)
+        {
+            dirichletIds.push_back(node.id);
+        }
+        assert(dirichletIds.size() == numDirichlet);
+        std::sort(dirichletIds.begin(), dirichletIds.end());
+
+        // Single channel first - Y channel will be appended later
+        std::vector<int> cpuInternalIds(numInternal);
+        int intIdx = 0;
+        int dIdx = 0;
+        int i = 0;
+        while (intIdx < numInternalChannel && dIdx < numDirichlet)
+        {
+            const int d = dirichletIds[dIdx];
+            if (i < d)
+            {
+                cpuInternalIds[intIdx] = i;
+                intIdx++;
+                i++;
+            }
+            else if (i == d)
+            {
+                i++;
+                dIdx++;
+            }
+            else
+            {
+                // Should never happen - each Dirichlet ID should be matched by a sequential ID
+                throw std::invalid_argument(std::format("Encountered invalid dirichlet ID [{}], which is outside of the valid range", d));
+            }
+        }
+        // Dirichlet nodes could run out before internal nodes
+        while (intIdx < numInternalChannel)
+        {
+            cpuInternalIds[intIdx] = i;
+            intIdx++;
+            i++;
+        }
+        assert(intIdx == numInternalChannel);
+        assert(dIdx == numDirichlet);
+
+        // Clone the X channel to Y
+        for (int i = 0; i < numInternalChannel; i++)
+        {
+            cpuInternalIds[i + numInternalChannel] = cpuInternalIds[i] + numNodesChannel;
+        }
+
+        // Upload
+        internalIds.overwriteUpload(cpuInternalIds);
+
+        // Acceleration
+        auto rc = cusparseCreateSpVec(&accelSparseVec, numNodes, numInternal, internalIds.get(), accelInt.get(),
+                                      cusparseIndexType_t::CUSPARSE_INDEX_32I,
+                                      cusparseIndexBase_t::CUSPARSE_INDEX_BASE_ZERO,
+                                      cudaDataType::CUDA_R_32F);
+        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
+        {
+            throw std::runtime_error(std::format("Failed to create cusparse sparse vector for acceleration: {}", cusparseGetErrorName(rc)));
+        }
+
+        // Right-hand side
+        rc = cusparseCreateSpVec(&rhsSparseVec, numNodes, numInternal, internalIds.get(), rhsInt.get(),
+                                 cusparseIndexType_t::CUSPARSE_INDEX_32I,
+                                 cusparseIndexBase_t::CUSPARSE_INDEX_BASE_ZERO,
+                                 cudaDataType::CUDA_R_32F);
+        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
+        {
+            throw std::runtime_error(std::format("Failed to create cusparse sparse vector for acceleration RHS: {}", cusparseGetErrorName(rc)));
+        }
+
+        accelDenseVec = accel.getCuSparseDescriptor();
+        rhsDenseVec = rhs.getCuSparseDescriptor();
+    }
+
+    // Copy internal elements of RHS into rhsInt
+    void sliceRhs()
+    {
+        auto rc = cusparseGather(lib.handle(), rhsDenseVec, rhsSparseVec);
+        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
+        {
+            throw std::runtime_error(std::format("Failed to gather acceleration RHS: {}", cusparseGetErrorName(rc)));
+        }
+    }
+
+    // Copy internal acceleartion to acceleration
+    void scatterAcceleration()
+    {
+        auto rc = cusparseScatter(lib.handle(), accelSparseVec, accelDenseVec);
+        if (rc != cusparseStatus_t::CUSPARSE_STATUS_SUCCESS)
+        {
+            throw std::runtime_error(std::format("Failed to scatter acceleration: {}", cusparseGetErrorName(rc)));
+        }
     }
 };
 
@@ -190,7 +330,7 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
         };
 
 #define DUMP(x) dump(#x, ctx.x)
-        DUMP(velocityMass);
+        DUMP(velocityMassInternal);
         DUMP(velocityStiffness);
         DUMP(pressureStiffness);
         DUMP(pressureStiffnessInternal);
@@ -201,7 +341,7 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
     }
 
     // Create CUDA matrices
-    cu::csrF velocityMass(ctx.velocityMass);
+    cu::csrF velocityMassInternal(ctx.velocityMassInternal);
     cu::csrF velocityStiffnessPlusConvection(ctx.velocityStiffness);
     cu::csrF pressureStiffnessInternal(ctx.pressureStiffnessInternal);
     cu::csrF velocityPressureDiv(ctx.velocityPressureDiv);
@@ -234,12 +374,22 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
     cu::vec<float> velocityY(velocityXy.get() + numVelocityNodes, numVelocityNodes);
 
     // Acceleration
-    // cu::vec<float> accel(2 * numVelocityNodes);
+    // Only solve for internal nodes, hence the two vectors for the left and right hand side
+    cu::vec<float> accel(2 * numVelocityNodes);
+    cu::vec<float> accelRhs(2 * numVelocityNodes);
     const auto & vSolverCfg = cfg.velocitySolver;
     auto velocitySolver = cu::createSolver(vSolverCfg.method, 2,
-                                           ctx.velocityMass, vSolverCfg.maxIterations,
+                                           ctx.velocityMassInternal, vSolverCfg.maxIterations,
                                            vSolverCfg.targetMse, vSolverCfg.mseCheckInterval);
-    auto & accel = velocitySolver->getSol();
+    auto & accelRhsInt = velocitySolver->getRhs();
+    auto & accelInt = velocitySolver->getSol();
+
+    assert(ctx.dirichletVx.size() == ctx.dirichletVy.size());
+    DirichletAcceleration dirichletAcceleration(sparse, accel, accelInt, accelRhs, accelRhsInt, ctx.dirichletVx);
+
+    // Default state of accelration vector
+    // Dirichlet nodes will remain zero throughout the run
+    accel.memsetZero();
 
     // Pressure
     cu::spmv vpdSpmv(sparse.handle(), velocityPressureDiv);
@@ -314,7 +464,6 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
         // 2) Solve M0 * accelXy = accelRhsXy
         // 3) Apply the acceleration
 
-        auto & accelRhs = velocitySolver->getRhs();
         aSpmm.compute(velocityXy, accelRhs);
         if (dumpNow)
         {
@@ -324,8 +473,11 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
             linalg::write(outFname, dbgAccelRhsXy);
         }
 
-        accel.memsetZero();
+        dirichletAcceleration.sliceRhs(); // accelRhs -> accelRhsInt
+        accelInt.memsetZero();
         velocitySolver->solve();
+        dirichletAcceleration.scatterAcceleration(); // accelInt -> accel
+
         currLog.mseTentative[0] = velocitySolver->getLastMse(0);
         currLog.mseTentative[1] = velocitySolver->getLastMse(1);
         currLog.itersTentative = velocitySolver->getLastIterations();
@@ -336,8 +488,6 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
         // v* = v - tau * accel
         cu::saxpy(blas, 2 * numVelocityNodes, accel.get(), velocityXy.get(), -tau);
 
-        // Reimpose BCs
-        dirichletVelocity.impose();
         cuTentative.record();
         if (dumpNow)
         {
@@ -422,8 +572,11 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
             linalg::write(outFname, dbgAccelRhsXy);
         }
 
-        accel.memsetZero();
+        dirichletAcceleration.sliceRhs(); // accelRhs -> accelRhsInt
+        accelInt.memsetZero();
         velocitySolver->solve();
+        dirichletAcceleration.scatterAcceleration(); // accelInt -> accel
+
         currLog.mseFinal[0] = velocitySolver->getLastMse(0);
         currLog.mseFinal[1] = velocitySolver->getLastMse(1);
         currLog.itersFinal = velocitySolver->getLastIterations();
@@ -434,7 +587,6 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
 
         cu::saxpy(blas, 2 * numVelocityNodes, accel.get(), velocityXy.get(), -tau);
 
-        dirichletVelocity.impose();
         cuFinal.record();
 
         if (dumpNow)

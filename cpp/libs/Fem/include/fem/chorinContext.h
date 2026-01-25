@@ -20,6 +20,7 @@ namespace fem
         std::vector<int> internalPressureNodes;
 
         linalg::CsrMatrix<float> velocityMass;
+        linalg::CsrMatrix<float> velocityMassInternal;
         linalg::CsrMatrix<float> velocityStiffness;
         linalg::CsrMatrix<float> pressureStiffness;
         linalg::CsrMatrix<float> pressureStiffnessInternal;

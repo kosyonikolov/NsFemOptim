@@ -116,6 +116,7 @@ fem::ChorinContextF buildChorinContext(const mesh::ConcreteMesh & velocityMesh, 
     std::cout.flush();
     const auto tCsrs = smallSw.millis(true);
 
+    result.velocityMassInternal = result.velocityMass.slice(result.internalVelocityNodes, result.internalVelocityNodes);
     result.pressureStiffnessInternal = result.pressureStiffness.slice(result.internalPressureNodes, result.internalPressureNodes);
     const auto tSlice = smallSw.millis(true);
 
