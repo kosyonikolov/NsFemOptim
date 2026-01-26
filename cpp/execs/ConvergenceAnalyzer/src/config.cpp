@@ -17,7 +17,7 @@ Config parseConfig(const std::string & fileName)
     parser.populate(file);
     Config result;
 #define PARSE(x) parser.parse(#x, result.x)
-   
+    PARSE(replaceInputIds);
 #undef PARSE
 
     return result;

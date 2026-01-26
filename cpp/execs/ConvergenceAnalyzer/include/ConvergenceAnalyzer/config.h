@@ -5,7 +5,8 @@
 
 struct Config
 {
-
+    // Replace input IDs with sequential ones
+    bool replaceInputIds = false;
 };
 
 Config parseConfig(const std::string & fileName);

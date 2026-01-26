@@ -372,16 +372,30 @@ int main(int argc, char ** argv)
         return 1;
     }
 
-    // const std::string cfgFname = argv[1];
+    const std::string cfgFname = argv[1];
     const std::string inputCfgFname = argv[2];
 
-    // auto cfg = parseConfig(cfgFname);
+    auto cfg = parseConfig(cfgFname);
     const auto inputCfg = readInputConfig(inputCfgFname);
 
     std::vector<std::vector<Triplet>> dirs(3);
     dirs[0] = findFiles(inputCfg.smallDir);
     dirs[1] = findFiles(inputCfg.mediumDir);
     dirs[2] = findFiles(inputCfg.largeDir);
+
+    if (cfg.replaceInputIds)
+    {
+        std::cout << "Replacing input IDs!!!\n";
+        for (auto & dir : dirs)
+        {
+            int i = 0;
+            for (auto & t : dir)
+            {
+                t.id = i;
+                i++;
+            }
+        }
+    }
 
     if (dirs[0].empty())
     {
