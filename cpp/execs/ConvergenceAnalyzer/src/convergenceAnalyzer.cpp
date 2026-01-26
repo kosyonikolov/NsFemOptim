@@ -3,12 +3,20 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <numeric>
 #include <sstream>
 #include <string>
 
 #include <linalg/io.h>
 
 #include <ConvergenceAnalyzer/config.h>
+
+enum class MapType
+{
+    Identity,
+    Standard,
+    Undefined
+};
 
 struct InputConfig
 {
@@ -337,6 +345,24 @@ void writeStats(const Stats & stats, const std::string & fileName)
     file << "global_conv_rate," << stats.globalConvRate << "\n";
 }
 
+MapType determineMapType(const InputConfig & cfg)
+{
+    const bool a = cfg.mediumVelocityMap != "-";
+    const bool b = cfg.largeVelocityMap != "-";
+    const bool c = cfg.mediumPressureMap != "-";
+    const bool d = cfg.largePressureMap != "-";
+
+    if (a && b && c && d)
+    {
+        return MapType::Standard;
+    }
+    else if (!a && !b && !c && !d)
+    {
+        return MapType::Identity;
+    }
+    return MapType::Undefined;
+}
+
 int main(int argc, char ** argv)
 {
     const std::string usageMsg = "./ConvergenceAnalyzer <cfg> <input config>";
@@ -352,19 +378,58 @@ int main(int argc, char ** argv)
     // auto cfg = parseConfig(cfgFname);
     const auto inputCfg = readInputConfig(inputCfgFname);
 
-    std::vector<std::vector<int>> inputVelocityMaps(2), inputPressureMaps(2);
-    inputVelocityMaps[0] = readMap(inputCfg.mediumVelocityMap);
-    inputVelocityMaps[1] = readMap(inputCfg.largeVelocityMap);
-    inputPressureMaps[0] = readMap(inputCfg.mediumPressureMap);
-    inputPressureMaps[1] = readMap(inputCfg.largePressureMap);
-
-    auto velocityMaps = createCommonMaps(inputVelocityMaps);
-    auto pressureMaps = createCommonMaps(inputPressureMaps);
-
     std::vector<std::vector<Triplet>> dirs(3);
     dirs[0] = findFiles(inputCfg.smallDir);
     dirs[1] = findFiles(inputCfg.mediumDir);
     dirs[2] = findFiles(inputCfg.largeDir);
+
+    if (dirs[0].empty())
+    {
+        std::cerr << "No files found in small directory!\n";
+        return 1;
+    }
+
+    std::vector<std::vector<int>> velocityMaps, pressureMaps;
+
+    const auto mapType = determineMapType(inputCfg);
+    if (mapType == MapType::Standard)
+    {
+        std::cout << "Reading maps for spatial convergence\n";
+        std::vector<std::vector<int>> inputVelocityMaps(2), inputPressureMaps(2);
+        inputVelocityMaps[0] = readMap(inputCfg.mediumVelocityMap);
+        inputVelocityMaps[1] = readMap(inputCfg.largeVelocityMap);
+        inputPressureMaps[0] = readMap(inputCfg.mediumPressureMap);
+        inputPressureMaps[1] = readMap(inputCfg.largePressureMap);
+
+        velocityMaps = createCommonMaps(inputVelocityMaps);
+        pressureMaps = createCommonMaps(inputPressureMaps);
+    }
+    else if (mapType == MapType::Identity)
+    {
+        std::cout << "Creating identity maps for temporal convergence\n";
+
+        // Read one vector to determine the number of velocity and pressure nodes
+        const auto velocity = linalg::readVec<float>(dirs[0][0].velocityFname);
+        const auto pressure = linalg::readVec<float>(dirs[0][0].pressureFname);
+        std::cout << std::format("Velocity nodes = {}, pressure nodes = {}\n", velocity.size(), pressure.size());
+
+        std::vector<int> vMap(velocity.size());
+        std::iota(vMap.begin(), vMap.end(), 0);
+
+        std::vector<int> pMap(pressure.size());
+        std::iota(pMap.begin(), pMap.end(), 0);
+
+        for (int i = 0; i < 3; i++)
+        {
+            velocityMaps.push_back(vMap);
+            pressureMaps.push_back(pMap);
+        }
+    }
+    else
+    {
+        std::cerr << "Couldn't determine map type! Either all maps should be disabled (-), or all should be present!\n";
+        return 1;
+    }
 
     const auto pressureStats = analyze(dirs, pressureMaps, false);
     const auto velocityStats = analyze(dirs, velocityMaps, true);
