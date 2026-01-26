@@ -411,12 +411,14 @@ int main(int argc, char ** argv)
         // Read one vector to determine the number of velocity and pressure nodes
         const auto velocity = linalg::readVec<float>(dirs[0][0].velocityFname);
         const auto pressure = linalg::readVec<float>(dirs[0][0].pressureFname);
-        std::cout << std::format("Velocity nodes = {}, pressure nodes = {}\n", velocity.size(), pressure.size());
+        const int nVelocityNodes = velocity.size() / 2; // !!! 2 channels (X and Y) !!!
+        const int nPressureNodes = pressure.size();
+        std::cout << std::format("Velocity nodes = {}, pressure nodes = {}\n", nVelocityNodes, nPressureNodes);
 
-        std::vector<int> vMap(velocity.size());
+        std::vector<int> vMap(nVelocityNodes);
         std::iota(vMap.begin(), vMap.end(), 0);
 
-        std::vector<int> pMap(pressure.size());
+        std::vector<int> pMap(nPressureNodes);
         std::iota(pMap.begin(), pMap.end(), 0);
 
         for (int i = 0; i < 3; i++)
