@@ -375,7 +375,11 @@ int main(int argc, char ** argv)
     const std::string cfgFname = argv[1];
     const std::string inputCfgFname = argv[2];
 
-    auto cfg = parseConfig(cfgFname);
+    Config cfg;
+    if (cfgFname != "-" && cfgFname != "")
+    {
+        cfg = parseConfig(cfgFname);
+    }
     const auto inputCfg = readInputConfig(inputCfgFname);
 
     std::vector<std::vector<Triplet>> dirs(3);
