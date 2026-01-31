@@ -3,8 +3,9 @@
 #include <format>
 #include <stdexcept>
 
-#include <cu/gaussSeidel.h>
+#include <cu/conjGradF.h>
 #include <cu/dssSolver.h>
+#include <cu/gaussSeidel.h>
 #include <cu/sparse.h>
 #include <cu/spmm.h>
 
@@ -24,7 +25,8 @@ namespace cu
 
     public:
         GsWrapper(const int numCh, const linalg::CsrMatrix<float> & m,
-                  const int maxIters, const float targetMse) : numCh(numCh), maxIters(maxIters), targetMse(targetMse)
+                  const int maxIters, const float targetMse)
+            : numCh(numCh), maxIters(maxIters), targetMse(targetMse)
         {
             core = std::make_unique<GaussSeidel>(blas, sparse.handle(), m, numCh);
             lastCombinedMse = -1;
@@ -102,7 +104,8 @@ namespace cu
 
     public:
         DssWrapper(const int numCh, const linalg::CsrMatrix<float> & m,
-                   const bool calculateMse) : numCh(numCh), calculateMse(calculateMse)
+                   const bool calculateMse)
+            : numCh(numCh), calculateMse(calculateMse)
         {
             core = std::make_unique<DssSolver>(dss, m, numCh, cudssMatrixType_t::CUDSS_MTYPE_SPD);
             core->analyze();
@@ -206,6 +209,80 @@ namespace cu
         }
     };
 
+    class CgWrapper : public AbstractSolver
+    {
+        std::unique_ptr<csrF> gpuMat;
+        std::unique_ptr<ConjugateGradientF> cg;
+
+        cu::vec<float> rhs;
+        cu::vec<float> sol;
+
+        int numRows;
+        float targetMse = 0;
+        int maxIterations = 0;
+
+        float lastMse = 0;
+        int lastIters = 0;
+
+    public:
+        CgWrapper(const linalg::CsrMatrix<float> & mat, const int maxIters, const float targetMse)
+            : rhs(mat.rows), sol(mat.rows)
+        {
+            gpuMat = std::make_unique<csrF>(mat);
+            cg = std::make_unique<ConjugateGradientF>(*gpuMat);
+            numRows = mat.rows;
+            setMaxIters(maxIters);
+        }
+
+        int getNumCh() const
+        {
+            return 1;
+        }
+
+        float getLastMse(const int) const
+        {
+            return lastMse;
+        }
+
+        int getLastIterations() const
+        {
+            return lastIters;
+        }
+
+        cu::vec<float> & getRhs()
+        {
+            return rhs;
+        }
+
+        cu::vec<float> & getSol()
+        {
+            return sol;
+        }
+
+        void solve()
+        {
+            lastMse = cg->solve(rhs, sol, maxIterations, targetMse);
+            lastIters = cg->getLastIters();
+        }
+
+        void setMaxIters(const int n)
+        {
+            if (n < 1)
+            {
+                maxIterations = numRows;
+            }
+        }
+
+        void setTargetMse(const float mse)
+        {
+            targetMse = mse;
+        }
+
+        void setMseCheckInterval(const int)
+        {
+        }
+    };
+
     std::unique_ptr<AbstractSolver> createSolver(const std::string & name, const int numCh, const linalg::CsrMatrix<float> & m,
                                                  const int maxIters, const float targetMse, const int mseCheckInterval)
     {
@@ -230,6 +307,11 @@ namespace cu
             constexpr bool dssWithMse = true;
 
             auto res = std::make_unique<DssWrapper>(numCh, m, dssWithMse);
+            return res;
+        }
+        else if (name == "cg")
+        {
+            auto res = std::make_unique<CgWrapper>(m, maxIters, targetMse);
             return res;
         }
 

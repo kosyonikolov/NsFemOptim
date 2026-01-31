@@ -17,10 +17,17 @@ namespace cu
         spmv spmv;
         cu::vec<float> r;
 
+        int numIters = 0;
+
     public:
         ConjugateGradientF(csrF & mat);
 
         float solve(vec<float> & rhs, vec<float> & x, const int maxIters, const float target);
+
+        int getLastIters()
+        {
+            return numIters;
+        }
     };
 } // namespace cu
 

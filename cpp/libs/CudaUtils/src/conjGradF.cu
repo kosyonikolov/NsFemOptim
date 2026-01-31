@@ -19,6 +19,8 @@ namespace cu
 
     float ConjugateGradientF::solve(vec<float> & rhs, vec<float> & x, const int maxIters, const float target)
     {
+        numIters = 0;
+
         const int n = spmv.mat.rows;
 
         // Init: r = rhs - Mx
@@ -70,7 +72,9 @@ namespace cu
 #ifdef CU_SOLVERS_ITER_LOG
         u::Stopwatch bigSw;
 #endif
-        for (int iter = 0; iter < maxIters; iter++)
+
+        int iter = 0;
+        for (; iter < maxIters; iter++)
         {
 #ifdef CU_SOLVERS_ITER_LOG
             bigSw.reset();
@@ -148,6 +152,7 @@ namespace cu
 #endif
         }
 
+        numIters = iter + 1;
         return lastMse;
     }
 } // namespace cu
