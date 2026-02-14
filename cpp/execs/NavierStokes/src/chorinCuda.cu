@@ -200,6 +200,8 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
 #undef DUMP
     }
 
+    u::Stopwatch initSw;
+
     // Create CUDA matrices
     cu::csrF velocityMass(ctx.velocityMass);
     cu::csrF velocityStiffnessPlusConvection(ctx.velocityStiffness);
@@ -207,6 +209,8 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
     cu::csrF velocityPressureDiv(ctx.velocityPressureDiv);
     cu::csrF pressureVelocityDiv(ctx.pressureVelocityDiv);
     cu::csrF fastConvectionIntegration(ctx.fastConvectionIntegration);
+
+    const float tUpload = initSw.millis(true);
 
     // Copy original stiffness matrix values
     // On each iteration we will do A = viscosity * M1 + C and store the result in velocityStiffnessPlusConvection
@@ -233,6 +237,8 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
     cu::vec<float> velocityX(velocityXy.get(), numVelocityNodes);
     cu::vec<float> velocityY(velocityXy.get() + numVelocityNodes, numVelocityNodes);
 
+    float tOther = initSw.millis(true);
+
     // Acceleration
     // cu::vec<float> accel(2 * numVelocityNodes);
     const auto & vSolverCfg = cfg.velocitySolver;
@@ -248,13 +254,19 @@ void solveNsChorinCuda(const mesh::ConcreteMesh & velocityMesh, const mesh::Conc
                                                ctx.pressureStiffnessInternal, pSolverCfg.maxIterations,
                                                pSolverCfg.targetMse, pSolverCfg.mseCheckInterval);
     PressureSolver pressureSolver(*pressureSolverCore, sparse, numPressureNodes, ctx.internalPressureNodes);
+    const float tSolverInit = initSw.millis();
+    std::cout << "CUDA solver init time: " << tSolverInit << "\n";
 
+    initSw.reset();
     cu::spmv pvdSpmv(sparse.handle(), pressureVelocityDiv);
     auto & nablaPXy = pvdSpmv.b;
     assert(nablaPXy.size() == 2 * numVelocityNodes);
     // Create vectors for the X and Y components of nabla
     cu::vec<float> nablaPX(nablaPXy.get(), numVelocityNodes);
     cu::vec<float> nablaPY(nablaPXy.get() + numVelocityNodes, numVelocityNodes);
+
+    tOther += initSw.millis();
+    std::cout << "Upload time: " << tUpload << ", other: " << tOther << "\n";
 
     const int numTimeSteps = std::ceil(maxT / timeStep0);
     const float tau = maxT / numTimeSteps;

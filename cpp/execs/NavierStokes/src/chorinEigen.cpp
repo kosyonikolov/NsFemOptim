@@ -161,6 +161,8 @@ void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::Con
 
     // =========================================================================================================
 
+    u::Stopwatch initSw;
+    
     const float viscosity = cond.viscosity;
 
     std::vector<float> velocityXy(2 * numVelocityNodes, 0);
@@ -189,6 +191,8 @@ void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::Con
 
     imposeDirichletVelocity(0);
 
+    float tOther = initSw.millis();
+
     std::cout << "Setting up FastConvection... ";
     fem::FastConvection fastConvection(velocityMesh, velocityIntegrator);
     std::cout << "Done\n";
@@ -196,8 +200,10 @@ void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::Con
     const int numTimeSteps = std::ceil(maxT / timeStep0);
     const float tau = maxT / numTimeSteps;
 
-    Eigen::SimplicialLDLT<SpMat> velocityMassSolver(velocityMass);
+    initSw.reset();
     Eigen::SimplicialLDLT<SpMat> pressureStiffnessSolver(pressureInternalStiffness);
+    const auto tSolverInit = initSw.millis();
+    std::cout << "Solver init time: " << tSolverInit << "\n";
     if (false)
     {
         auto dumpM = linalg::csrFromEigen(pressureInternalStiffness);
@@ -254,6 +260,8 @@ void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::Con
         drawVelocity("velocity_initial", dbgVelocityX, dbgVelocityY, "INITIAL");
     }
 
+    initSw.reset();
+
     SpMat A0 = viscosity * velocityStiffness;
     SpMat A;
 
@@ -263,6 +271,9 @@ void solveNsChorinEigen(const mesh::ConcreteMesh & velocityMesh, const mesh::Con
     // Interleaved XY
     std::vector<float> tentRhs(2 * velocityMassCsr.rows);
     std::vector<float> tentAcc(2 * velocityMassCsr.rows);
+
+    tOther += initSw.millis();
+    std::cout << "Other time: " << tOther << "\n";
 
     // ======= Debug dumps =======
     const std::string dumpDir = "dumps_eigen";
