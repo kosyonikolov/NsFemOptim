@@ -2,6 +2,7 @@ add_subdirectory(MatrixTest)
 add_subdirectory(GsTest)
 add_subdirectory(AssemblyTest)
 add_subdirectory(ChorinContextBuilder)
+add_subdirectory(ParallelGsDemo)
 
 if (CMAKE_CUDA_COMPILER)
     add_subdirectory(SpmvTest)

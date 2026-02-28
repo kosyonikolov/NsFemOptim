@@ -1,8 +1,10 @@
 #ifndef LIBS_LINALG_INCLUDE_LINALG_CSRMATRIX
 #define LIBS_LINALG_INCLUDE_LINALG_CSRMATRIX
 
+#include <cassert>
 #include <format>
 #include <stdexcept>
+#include <ostream>
 #include <vector>
 #include <span>
 
@@ -113,6 +115,43 @@ namespace linalg
             return mse(x.data(), b.data());
         }
     };
+
+    template<typename F>
+    std::ostream & operator<<(std::ostream & s, const CsrMatrix<F> & m)
+    {
+        for (int r = 0; r < m.rows; r++)
+        {
+            int j = m.rowStart[r];
+            const int j1 = m.rowStart[r + 1];
+            int c = 0;
+            while (c < m.cols && j < j1)
+            {
+                if (c == m.column[j])
+                {
+                    s << m.values[j] << "\t";
+                    c++;
+                    j++;
+                }
+                else
+                {
+                    // If it's the other way around, that would mean there is a column which is outside of [0, columns - 1]
+                    // or the column vector is not sorted. Both shouldn't happen
+                    assert(c < m.column[j]); 
+                    s << "-\t";
+                    c++;
+                }
+            }
+            assert(j == j1);
+            while (c < m.cols)
+            {
+                s << "-\t";
+                c++;
+            }
+            s << "\n";
+        }
+        return s;
+    }
+
 } // namespace linalg
 
 #endif /* LIBS_LINALG_INCLUDE_LINALG_CSRMATRIX */

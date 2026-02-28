@@ -279,6 +279,7 @@ namespace linalg
     }
 
     template CsrMatrix<float> CsrMatrix<float>::slice(std::span<const int> rowIds, std::span<const int> colIds) const;
+    template CsrMatrix<int> CsrMatrix<int>::slice(std::span<const int> rowIds, std::span<const int> colIds) const;
 
     template void CsrMatrix<float>::findOffsets(const int row, std::span<const int> columnIds, std::span<int> dstOffsets) const;
 

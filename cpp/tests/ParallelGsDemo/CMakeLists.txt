@@ -1,0 +1,3 @@
+add_executable(ParallelGsDemo src/parallelGsDemo.cpp)
+target_include_directories(ParallelGsDemo PRIVATE include/)
+target_link_libraries(ParallelGsDemo LinAlg Utils)
