@@ -120,9 +120,9 @@ int main()
         3, 4, 5, 0, 0, 0, 0,
         0, 6, 7, 8, 0, 0, 0,
         0, 0, 0, 9, 10, 11, 0,
-        0, 0, 0, 0, 11, 12, 13,
-        0, 0, 0, 0, 0, 14, 15,
-        0, 0, 0, 0, 0, 0, 16
+        0, 0, 0, 0, 12, 13, 14,
+        0, 0, 0, 0, 0, 15, 16,
+        0, 0, 0, 0, 0, 0, 17
     };
     // clang-format on
 
@@ -173,6 +173,13 @@ int main()
 
     std::cout << "Partition start:";
     for (int k : partitionStart)
+    {
+        std::cout << " " << k;
+    }
+    std::cout << "\n";
+
+    std::cout << "Coloring permutation:";
+    for (int k : coloring)
     {
         std::cout << " " << k;
     }
