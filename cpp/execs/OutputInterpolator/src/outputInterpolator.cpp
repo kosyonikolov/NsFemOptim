@@ -231,7 +231,7 @@ public:
             return;
         }
 
-        const cv::Mat img = mesh::drawCfd(lookup, pressureColorScale, 800,
+        const cv::Mat img = mesh::drawCfd(lookup, pressureColorScale, cfg.imgScale, cfg.outputWidth,
                                           cfg.velocityScale, cfg.velocityStep,
                                           velocityMesh, pressureMesh,
                                           velocity, pressure);

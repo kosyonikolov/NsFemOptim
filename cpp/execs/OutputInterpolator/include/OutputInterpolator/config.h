@@ -7,6 +7,7 @@ struct Config
 {
     std::string ext = "ppm";
     float imgScale = 800;
+    int outputWidth = -1; // If >0, overrides imgScale
 
     float velocityStep = 0.025;
     float velocityScale = 0.0025;

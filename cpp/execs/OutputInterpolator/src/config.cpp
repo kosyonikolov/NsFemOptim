@@ -19,6 +19,7 @@ Config parseConfig(const std::string & fileName)
 #define PARSE(x) parser.parse(#x, result.x)
     PARSE(ext);
     PARSE(imgScale);
+    PARSE(outputWidth);
 
     PARSE(velocityStep);
     PARSE(velocityScale);

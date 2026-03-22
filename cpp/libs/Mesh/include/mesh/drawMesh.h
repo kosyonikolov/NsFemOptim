@@ -19,7 +19,8 @@ namespace mesh
 
     // Color pressure + velocity vector field
     cv::Mat drawCfd(const TriangleLookup & triangleLookup, const AbstractColorScale & pressureScale,
-                    const float imgScale, const float velocityScale, const float velocityStep,
+                    const float imgScale0, const int outputWidth,
+                    const float velocityScale, const float velocityStep,
                     const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
                     const std::vector<float> & velocityXy, const std::vector<float> & pressure);
 }

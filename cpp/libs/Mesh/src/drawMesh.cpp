@@ -1,11 +1,11 @@
 #include <mesh/drawMesh.h>
 
-#include <limits>
 #include <cassert>
+#include <limits>
 #include <span>
 
-#include <mesh/interpolator.h>
 #include <mesh/colorScale.h>
+#include <mesh/interpolator.h>
 #include <mesh/triangleLookup.h>
 
 namespace mesh
@@ -29,7 +29,7 @@ namespace mesh
         const float spanX = maxX - minX;
         const float spanY = maxY - minY;
         const int borderPx = 100;
-        
+
         auto cvPoint = [&](const el::Point & p)
         {
             const int x = borderPx + scale * (p.x - minX);
@@ -43,7 +43,7 @@ namespace mesh
 
         // Draw triangles
         const cv::Scalar triColor(0, 0, 255);
-        std::array<el::Point, 3> refPts = {el::Point{0,0}, el::Point{0,1}, el::Point{1,0}};
+        std::array<el::Point, 3> refPts = {el::Point{0, 0}, el::Point{0, 1}, el::Point{1, 0}};
         std::array<cv::Point2i, 3> cvTriPts;
         const int nElem = mesh.numElements;
         for (int i = 0; i < nElem; i++)
@@ -61,8 +61,7 @@ namespace mesh
         }
 
         // Draw borders
-        const std::vector<cv::Scalar> borderColors
-        {
+        const std::vector<cv::Scalar> borderColors{
             cv::Scalar(0, 255, 0),
             cv::Scalar(255, 0, 0),
             cv::Scalar(255, 0, 255),
@@ -70,8 +69,7 @@ namespace mesh
             cv::Scalar(255, 255, 0),
             cv::Scalar(0, 128, 0),
             cv::Scalar(128, 0, 0),
-            cv::Scalar(128, 0, 128)
-        };
+            cv::Scalar(128, 0, 128)};
 
         const int nBorderElements = mesh.numBorderElements;
         const int borderElSize = mesh.getBorderElementSize();
@@ -124,9 +122,9 @@ namespace mesh
                 if (!val)
                 {
                     continue;
-                } 
+                }
                 const auto color = colorScale(val.value());
-               
+
                 uint8_t * pix = line + 3 * ix;
                 pix[0] = color[0];
                 pix[1] = color[1];
@@ -137,14 +135,32 @@ namespace mesh
         return result;
     }
 
+    std::tuple<int, int, float> calcOutputSizeAndScale(const float imgScale0, const int outputWidth,
+                                                       const float domainWidth, const float domainHeight)
+    {
+        if (outputWidth > 0)
+        {
+            const int width = outputWidth;
+            const float imgScale = width / domainWidth;
+            const int height = 2 * ((static_cast<int>(domainHeight * imgScale + 0.5) + 1) / 2);
+            return {width, height, imgScale};
+        }
+        else
+        {
+            const int width = 2 * ((static_cast<int>(domainWidth * imgScale0 + 0.5) + 1) / 2);
+            const int height = 2 * ((static_cast<int>(domainHeight * imgScale0 + 0.5) + 1) / 2);
+            const float imgScale = width / domainWidth;
+            return {width, height, imgScale};
+        }
+    }
+
     cv::Mat drawCfd(const TriangleLookup & triangleLookup, const AbstractColorScale & pressureScale,
-                    const float imgScale0, const float velocityScale, const float velocityStep,
+                    const float imgScale0, const int outputWidth,
+                    const float velocityScale, const float velocityStep,
                     const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
                     const std::vector<float> & velocityXy, const std::vector<float> & pressure)
     {
-        const int width = 2 *  ((static_cast<int>(triangleLookup.width * imgScale0 + 0.5) + 1) / 2);
-        const int height = 2 * ((static_cast<int>(triangleLookup.height * imgScale0 + 0.5) + 1) / 2);
-        const float imgScale = width / triangleLookup.width;
+        const auto [width, height, imgScale] = calcOutputSizeAndScale(imgScale0, outputWidth, triangleLookup.width, triangleLookup.height);
         const float invS = 1.0f / imgScale;
 
         cv::Mat result = cv::Mat::zeros(height, width, CV_8UC3);
@@ -177,7 +193,7 @@ namespace mesh
             for (int ix = 0; ix < width; ix++)
             {
                 const float x = ix * invS + triangleLookup.minX;
-                
+
                 const auto t = triangleLookup.lookup(x, y, &lastTriangleId);
                 if (!t)
                 {
@@ -193,7 +209,7 @@ namespace mesh
 
                 const float pVal = pressureElem->value(t->localX, t->localY, localPressure.data());
                 const auto color = pressureScale(pVal);
-               
+
                 uint8_t * pix = line + 3 * ix;
                 pix[0] = color[0];
                 pix[1] = color[1];
@@ -235,7 +251,7 @@ namespace mesh
 
                 const float dx = velocityElem->value(t->localX, t->localY, localVx.data());
                 const float dy = velocityElem->value(t->localX, t->localY, localVy.data());
-                
+
                 const float tx = x + velocityScale * dx;
                 const float ty = y + velocityScale * dy;
 
@@ -252,4 +268,4 @@ namespace mesh
 
         return result;
     }
-}
+} // namespace mesh
