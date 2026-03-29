@@ -23,6 +23,11 @@ namespace mesh
                     const float velocityScale, const float velocityStep,
                     const mesh::ConcreteMesh & velocityMesh, const mesh::ConcreteMesh & pressureMesh,
                     const std::vector<float> & velocityXy, const std::vector<float> & pressure);
-}
+
+    // Element colors
+    cv::Mat drawColoredMesh(const TriangleLookup & triangleLookup, const std::vector<std::vector<int>> & coloring,
+                            const std::vector<cv::Scalar> & colors,
+                            const float imgScale0, const int outputWidth = 0);
+} // namespace mesh
 
 #endif /* LIBS_MESH_INCLUDE_MESH_DRAWMESH */

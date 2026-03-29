@@ -6,6 +6,7 @@
 #include <element/affineTransform.h>
 #include <element/factory.h>
 
+#include <mesh/colorMesh.h>
 #include <mesh/colorScale.h>
 #include <mesh/concreteMesh.h>
 #include <mesh/drawMesh.h>
@@ -120,9 +121,50 @@ void analyzeMesh(const mesh::TriangleMesh & mesh)
     std::cout << "inscribed_radius\t" << inscribedRadius.min << "\t" << inscribedRadius.max << "\t" << inscribedRadius.average() << "\n";
 }
 
+std::vector<cv::Scalar> createColorPalette()
+{
+    std::vector<cv::Scalar> palette;
+
+    // https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=12
+    palette.push_back(cv::Scalar(227, 206, 166));
+    palette.push_back(cv::Scalar(180, 120, 31));
+    palette.push_back(cv::Scalar(138, 223, 178));
+    palette.push_back(cv::Scalar(44, 160, 51));
+    palette.push_back(cv::Scalar(153, 154, 251));
+    palette.push_back(cv::Scalar(28, 26, 227));
+    palette.push_back(cv::Scalar(111, 191, 253 ));
+    palette.push_back(cv::Scalar(0, 127, 255));
+    palette.push_back(cv::Scalar(214, 178, 202));
+    palette.push_back(cv::Scalar(154, 61, 106));
+    palette.push_back(cv::Scalar(153, 255, 255));
+    palette.push_back(cv::Scalar(40, 89, 177));
+
+    return palette;
+}
+
+void colorMesh(const mesh::TriangleMesh & mesh)
+{
+    auto coloring = mesh::colorMeshElements(mesh);
+    const int nColors = coloring.size();
+    std::cout << std::format("Colored with {} partitions:\n", nColors);
+    for (auto & part : coloring)
+    {
+        std::cout << part.size() << "\n";
+    }
+
+    auto element = el::createElement(el::Type::P1);
+    auto cMesh = mesh::createMesh(mesh, *element);
+    mesh::TriangleLookup lookup(cMesh, 0.01);
+
+    std::vector<cv::Scalar> colors = createColorPalette();
+
+    auto img = mesh::drawColoredMesh(lookup, coloring, colors, 2000, 0);
+    cv::imwrite("colored_mesh.png", img);
+}
+
 int main(int argc, char ** argv)
 {
-    const std::string usageMsg = "./MeshParser <msh file> [-a]";
+    const std::string usageMsg = "./MeshParser <msh file> [-a|c]";
     if (argc < 2)
     {
         std::cerr << usageMsg << "\n";
@@ -138,11 +180,26 @@ int main(int argc, char ** argv)
 
     auto triMesh = mesh::parseTriangleGmsh(gmsh);
 
-    if (argc > 2 && std::string(argv[2]) == "-a")
+    if (argc > 2)
     {
-        std::cout << "Analyzing mesh\n";
-        analyzeMesh(triMesh);
-        return 0;
+        const std::string theArg = argv[2];
+        if (theArg == "-a")
+        {
+            std::cout << "Analyzing mesh\n";
+            analyzeMesh(triMesh);
+            return 0;
+        }
+        else if (theArg == "-c")
+        {
+            std::cout << "Coloring mesh\n";
+            colorMesh(triMesh);
+            return 0;
+        }
+        else
+        {
+            std::cerr << "Unknown option\n";
+            return 1;
+        }
     }
 
     if (false)

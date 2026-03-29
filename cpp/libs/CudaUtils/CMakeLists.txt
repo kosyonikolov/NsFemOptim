@@ -10,7 +10,7 @@ add_library(CudaUtils src/sparse.cu src/vec.cu src/csrF.cu src/spmv.cu
                       src/dssSolverHost.cu
                       src/event.cu)
 target_include_directories(CudaUtils PUBLIC include/)
-target_link_libraries(CudaUtils PUBLIC Utils LinAlg)
+target_link_libraries(CudaUtils PUBLIC Utils LinAlg Graphs)
 
 find_package(CUDAToolkit REQUIRED)
 find_package(cudss REQUIRED)

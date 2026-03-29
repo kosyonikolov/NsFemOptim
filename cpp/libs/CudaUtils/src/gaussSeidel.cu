@@ -3,10 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <format>
 #include <stdexcept>
 
 #include <linalg/gaussSeidel.h>
 #include <linalg/graphs.h>
+
+#include <graphs/color.h>
 
 #include <utils/stopwatch.h>
 
@@ -139,8 +142,8 @@ namespace cu
         // Use the smallest-last ordering for now - it seems to produce good results
         auto graph = linalg::buildCsrGraph(cpuMatrix);
         assert(graph.size() == n);
-        auto slOrder = linalg::buildSmallestLastOrdering(graph);
-        auto parts = linalg::partitionGraphGreedy(graph, slOrder);
+        auto slOrder = graphs::buildSmallestLastOrdering(graph);
+        auto parts = graphs::partitionGraphGreedy(graph, slOrder);
 
         const int nColors = parts.size();
 

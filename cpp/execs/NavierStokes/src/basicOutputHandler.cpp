@@ -104,7 +104,7 @@ void BasicOutputHandler::writeOutput()
     for (int i = 0; i < storedSteps.size(); i++)
     {
         const auto & s = storedSteps[i];
-        const cv::Mat img = mesh::drawCfd(lookup, pressureColorScale, 800,
+        const cv::Mat img = mesh::drawCfd(lookup, pressureColorScale, cfg.imgScale, 0,
                                           velocityScale, velocityStep,
                                           velocityMesh, pressureMesh,
                                           s.velocity, s.pressure);

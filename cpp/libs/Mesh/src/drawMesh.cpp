@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <limits>
+#include <random>
 #include <span>
 
 #include <mesh/colorScale.h>
@@ -263,6 +264,80 @@ namespace mesh
 
                 cv::circle(result, origin, 1, velocityColor, cv::FILLED);
                 cv::line(result, origin, dst, velocityColor);
+            }
+        }
+
+        return result;
+    }
+
+    cv::Mat drawColoredMesh(const TriangleLookup & triangleLookup, const std::vector<std::vector<int>> & coloring,
+                            const std::vector<cv::Scalar> & colors,
+                            const float imgScale0, const int outputWidth)
+    {
+        const auto [width, height, imgScale] = calcOutputSizeAndScale(imgScale0, outputWidth, triangleLookup.width, triangleLookup.height);
+        const float invS = 1.0f / imgScale;
+
+        cv::Mat result = cv::Mat::zeros(height, width, CV_8UC3);
+
+        const auto & mesh = triangleLookup.mesh;
+        const int nElem = mesh.elements.size();
+        const int nColors = coloring.size();
+
+        std::vector<cv::Scalar> fullColors(nColors);
+        std::copy_n(colors.begin(), std::min(colors.size(), fullColors.size()), fullColors.begin());
+        {
+            // Generate random colors
+            std::default_random_engine rng(std::random_device{}());
+            std::uniform_int_distribution<uint8_t> dist;
+            for (int i = colors.size(); i < nColors; i++)
+            {
+                uint8_t r = dist(rng);
+                uint8_t g = dist(rng);
+                uint8_t b = dist(rng);
+                fullColors[i] = cv::Scalar(b, g, r);
+            }
+        }
+
+        // Create map from triangles to color indices
+        std::vector<int> colorMap(nElem, -1);
+        for (int c = 0; c < coloring.size(); c++)
+        {
+            for (int v : coloring[c])
+            {
+                assert(v >= 0 && v < nElem);
+                colorMap[v] = c;
+            }
+        }
+
+        int lastTriangleId = 0;
+        for (int iy = 0; iy < height; iy++)
+        {
+            const float y = (height - 1 - iy) * invS + triangleLookup.minY;
+            uint8_t * line = result.ptr<uint8_t>(iy);
+            for (int ix = 0; ix < width; ix++)
+            {
+                const float x = ix * invS + triangleLookup.minX;
+
+                const auto t = triangleLookup.lookup(x, y, &lastTriangleId);
+                if (!t)
+                {
+                    continue;
+                }
+
+                const int v = t->triangleId;
+                const int cIdx = colorMap[v];
+                if (cIdx < 0)
+                {
+                    continue;
+                }
+                assert(cIdx < nColors);
+
+                const auto color = fullColors[cIdx];
+
+                uint8_t * pix = line + 3 * ix;
+                pix[0] = color[0];
+                pix[1] = color[1];
+                pix[2] = color[2];
             }
         }
 

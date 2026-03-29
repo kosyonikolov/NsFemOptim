@@ -3,9 +3,10 @@ add_library(Mesh src/gmsh.cpp src/io.cpp
                  src/drawMesh.cpp
                  src/interpolator.cpp
                  src/colorScale.cpp
-                 src/triangleLookup.cpp)
+                 src/triangleLookup.cpp
+                 src/colorMesh.cpp)
 target_include_directories(Mesh PUBLIC include/)
-target_link_libraries(Mesh PUBLIC Element)
+target_link_libraries(Mesh PUBLIC Element Graphs Utils)
 
 find_package(OpenCV REQUIRED)
 target_link_libraries(Mesh PUBLIC ${OpenCV_LIBS})

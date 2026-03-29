@@ -3,6 +3,7 @@ add_subdirectory(Mesh)
 add_subdirectory(Utils)
 add_subdirectory(LinAlg)
 add_subdirectory(Fem)
+add_subdirectory(Graphs)
 
 if (CMAKE_CUDA_COMPILER)
     add_subdirectory(CudaUtils)
